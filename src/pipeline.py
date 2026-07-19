@@ -8,7 +8,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
-    from src.cards import CardGenerationError, generate_card_candidates
+    from src.cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
     from src.knowledge import KnowledgeExtractionError, extract_knowledge
     from src.output import save_transcript_json, save_transcript_text
     from src.ollama_client import OllamaClient, OllamaError
@@ -19,7 +19,7 @@ if __package__ in (None, ""):
     from src.target_expressions import TargetExpressionError, extract_target_expressions
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
-    from .cards import CardGenerationError, generate_card_candidates
+    from .cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
     from .knowledge import KnowledgeExtractionError, extract_knowledge
     from .output import save_transcript_json, save_transcript_text
     from .ollama_client import OllamaClient, OllamaError
@@ -92,6 +92,11 @@ def run_pipeline(
 
     if generate_cards:
         if paths.card_candidates_json.exists() and not force:
+            if paths.target_expressions_json.exists():
+                count = localize_existing_candidates(
+                    paths.card_candidates_json, paths.target_expressions_json
+                )
+                LOGGER.info("Локализовано карточек: %d", count)
             LOGGER.info("Кандидаты карточек уже существуют: %s", paths.card_candidates_json)
             return paths.card_candidates_json
         if not paths.knowledge_items_json.exists():

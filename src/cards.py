@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from collections import Counter, defaultdict
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from .card_enrichment import (
     normalize_front,
     number_candidates,
     proposal_to_candidate,
+    localize_card_text,
 )
 from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
 from .ollama_schemas import card_response_schema
@@ -408,14 +410,18 @@ def generate_card_candidates(
                 )
     knowledge_by_id = {item.id: item for item in items}
     expressions_by_knowledge: dict[str, list] = defaultdict(list)
+    verified_expressions: list = []
     if expressions_path and expressions_path.exists():
         for expression in load_target_expressions(expressions_path):
             if expression.verification != "verified":
                 continue
+            verified_expressions.append(expression)
             for knowledge_id in expression.knowledge_ids:
                 expressions_by_knowledge[knowledge_id].append(expression)
     candidates = [
-        proposal_to_candidate(item, knowledge_by_id, expressions_by_knowledge)
+        proposal_to_candidate(
+            item, knowledge_by_id, expressions_by_knowledge, verified_expressions
+        )
         for item in proposals
     ]
     candidates = deduplicate_candidates(candidates)
@@ -424,3 +430,30 @@ def generate_card_candidates(
     save_json_atomic(result.to_dict(), destination)
     diagnostic_path.unlink(missing_ok=True)
     return result
+
+
+def localize_existing_candidates(cards_path: Path, expressions_path: Path) -> int:
+    try:
+        data = json.loads(cards_path.read_text(encoding="utf-8"))
+        candidates = [CardCandidate(**item) for item in data["card_candidates"]]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CardGenerationError(f"Не удалось прочитать card_candidates.json: {exc}") from exc
+    verified = [
+        item for item in load_target_expressions(expressions_path)
+        if item.verification == "verified"
+    ]
+    by_id = {item.id: item for item in verified}
+    localized: list[CardCandidate] = []
+    for candidate in candidates:
+        linked = [
+            by_id[item_id] for item_id in (candidate.expression_ids or [])
+            if item_id in by_id
+        ]
+        front, back, extra = localize_card_text(
+            candidate.front, candidate.back, candidate.extra, linked, verified
+        )
+        localized.append(replace(candidate, front=front, back=back, extra=extra))
+    save_json_atomic(
+        {**data, "card_candidates": [item.__dict__ for item in localized]}, cards_path
+    )
+    return len(localized)

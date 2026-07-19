@@ -160,7 +160,45 @@ def test_expression_is_linked_and_native_form_is_added() -> None:
     )
 
     assert result.expression_ids == ["e_0001"]
-    assert "だって (datte)" in result.extra
+    assert result.front == "What does だって mean?"
+    assert "だって [だって] (datte)" in result.extra
+
+
+def test_native_sentence_is_prefixed_when_romaji_is_misrecognized() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(
+        ["k_0001"], "basic", "What does ashto wa hereta mean?", "Tomorrow is sunny.", "", 2
+    )
+    expression = TargetExpression(
+        "e_0002", "ja", "明日は晴れだって", "あしたははれだって",
+        "ashita wa hare datte", "It is said tomorrow will be sunny.",
+        ["k_0001"], [1], "verified", 0.9, "example_sentence",
+    )
+
+    result = proposal_to_candidate(
+        proposal, {items[0].id: items[0]}, {"k_0001": [expression]}
+    )
+
+    assert result.front.startswith("明日は晴れだって — ")
+
+
+def test_verified_term_is_replaced_globally() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(
+        ["k_0001"], "basic", "How does datte work?", "Datte marks a quotation.", "", 2
+    )
+    term = TargetExpression(
+        "e_0001", "ja", "だって", "だって", "datte", "quotation",
+        ["k_other"], [99], "verified", 0.9, "term",
+    )
+
+    result = proposal_to_candidate(
+        proposal, {items[0].id: items[0]}, {}, [term]
+    )
+
+    assert result.front == "How does だって work?"
+    assert result.back == "だって marks a quotation."
+    assert result.expression_ids == []
 
 
 def test_plain_text_cloze_underscores_are_allowed() -> None:
