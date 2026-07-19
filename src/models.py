@@ -116,6 +116,7 @@ class CardCandidate:
     importance: int
     tags: list[str]
     source_transcript_segment_ids: list[int]
+    expression_ids: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +124,31 @@ class CardCandidateCollection:
     source: str
     model: str
     card_candidates: list[CardCandidate]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class TargetExpression:
+    id: str
+    language: str
+    surface: str
+    reading: str
+    romanization: str
+    meaning: str
+    knowledge_ids: list[str]
+    source_transcript_segment_ids: list[int]
+    verification: str
+    confidence: float
+
+
+@dataclass(frozen=True)
+class TargetExpressionCollection:
+    source: str
+    model: str
+    target_language: str
+    expressions: list[TargetExpression]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

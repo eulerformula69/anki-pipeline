@@ -73,3 +73,36 @@ def card_response_schema(card_types: set[str], fields: set[str]) -> dict:
         "required": ["card_candidates"],
         "additionalProperties": False,
     }
+
+
+def target_expression_response_schema() -> dict:
+    fields = [
+        "surface", "reading", "romanization", "meaning", "knowledge_ids",
+        "source_transcript_segment_ids", "confidence",
+    ]
+    return {
+        "type": "object",
+        "properties": {
+            "expressions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "surface": {"type": "string"},
+                        "reading": {"type": "string"},
+                        "romanization": {"type": "string"},
+                        "meaning": {"type": "string"},
+                        "knowledge_ids": {"type": "array", "items": {"type": "string"}},
+                        "source_transcript_segment_ids": {
+                            "type": "array", "items": {"type": "integer"}
+                        },
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    },
+                    "required": fields,
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["expressions"],
+        "additionalProperties": False,
+    }

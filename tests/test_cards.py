@@ -11,7 +11,7 @@ from src.cards import (
     parse_card_response,
     proposal_to_candidate,
 )
-from src.models import CardCandidate, KnowledgeItem, KnowledgeReview
+from src.models import CardCandidate, KnowledgeItem, KnowledgeReview, TargetExpression
 
 
 def knowledge_items() -> list[KnowledgeItem]:
@@ -145,6 +145,22 @@ def test_proposal_builds_automatic_fields() -> None:
     assert result.importance == 5
     assert result.tags == ["definition", "fact"]
     assert result.source_transcript_segment_ids == [1, 2]
+
+
+def test_expression_is_linked_and_native_form_is_added() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(["k_0001"], "basic", "What does datte mean?", "A reason.", "", 2)
+    expression = TargetExpression(
+        "e_0001", "ja", "だって", "だって", "datte", "reason",
+        ["k_0001"], [1], "needs_review", 0.9,
+    )
+
+    result = proposal_to_candidate(
+        proposal, {items[0].id: items[0]}, {"k_0001": [expression]}
+    )
+
+    assert result.expression_ids == ["e_0001"]
+    assert "だって (datte)" in result.extra
 
 
 def test_plain_text_cloze_underscores_are_allowed() -> None:

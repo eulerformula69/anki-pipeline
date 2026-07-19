@@ -9,4 +9,4 @@ input/*
 output/*
 !output/.gitkeep
 repomix-output.*
-
+.npm-cache/

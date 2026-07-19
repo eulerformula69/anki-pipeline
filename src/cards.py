@@ -4,7 +4,6 @@ import json
 import logging
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,11 +14,19 @@ from .models import (
     KnowledgeItem,
     KnowledgeReview,
 )
+from .card_enrichment import (
+    CardProposal,
+    deduplicate_candidates,
+    normalize_front,
+    number_candidates,
+    proposal_to_candidate,
+)
 from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
 from .ollama_schemas import card_response_schema
 from .progress import ActivityIndicator
 from .review import KnowledgeReviewError, load_knowledge_items
 from .semantic import save_json_atomic
+from .target_expressions import load_target_expressions
 
 LOGGER = logging.getLogger("anki_pipeline.cards")
 
@@ -60,16 +67,6 @@ AMBIGUOUS_STARTS = {
 
 class CardGenerationError(RuntimeError):
     pass
-
-
-@dataclass(frozen=True)
-class CardProposal:
-    knowledge_ids: list[str]
-    card_type: str
-    front: str
-    back: str
-    extra: str
-    difficulty: int
 
 
 def load_knowledge_reviews(path: Path) -> tuple[str, str, list[KnowledgeReview]]:
@@ -192,10 +189,6 @@ difficulty — целое число 1–5. Не возвращай importance, 
 
 INPUT:
 {json.dumps(payload, ensure_ascii=False, indent=2)}"""
-
-
-def normalize_front(text: str) -> str:
-    return " ".join(text.casefold().split())
 
 
 def has_forbidden_formatting(text: str) -> bool:
@@ -330,73 +323,6 @@ def parse_card_response(
     return proposals
 
 
-def build_tags(items: list[KnowledgeItem], card_type: str) -> list[str]:
-    tags: list[str] = []
-    for value in [card_type, *(item.type for item in items)]:
-        tag = "pitfall" if value == "mistake" else value
-        if tag not in tags:
-            tags.append(tag)
-    return tags
-
-
-def proposal_to_candidate(
-    proposal: CardProposal,
-    knowledge_by_id: dict[str, KnowledgeItem],
-) -> CardCandidate:
-    items = [knowledge_by_id[item] for item in proposal.knowledge_ids]
-    source_ids = sorted(
-        {
-            segment_id
-            for item in items
-            for segment_id in item.source_transcript_segment_ids
-        }
-    )
-    return CardCandidate(
-        card_id="",
-        knowledge_ids=proposal.knowledge_ids,
-        card_type=proposal.card_type,
-        front=proposal.front,
-        back=proposal.back,
-        extra=proposal.extra,
-        difficulty=proposal.difficulty,
-        importance=max(item.importance for item in items),
-        tags=build_tags(items, proposal.card_type),
-        source_transcript_segment_ids=source_ids,
-    )
-
-
-def deduplicate_candidates(candidates: list[CardCandidate]) -> list[CardCandidate]:
-    unique: list[CardCandidate] = []
-    positions: dict[str, int] = {}
-    for candidate in candidates:
-        key = normalize_front(candidate.front)
-        if key not in positions:
-            positions[key] = len(unique)
-            unique.append(candidate)
-            continue
-        index = positions[key]
-        existing = unique[index]
-        unique[index] = replace(
-            existing,
-            knowledge_ids=list(dict.fromkeys(existing.knowledge_ids + candidate.knowledge_ids)),
-            importance=max(existing.importance, candidate.importance),
-            difficulty=max(existing.difficulty, candidate.difficulty),
-            tags=list(dict.fromkeys(existing.tags + candidate.tags)),
-            source_transcript_segment_ids=sorted(
-                set(existing.source_transcript_segment_ids)
-                | set(candidate.source_transcript_segment_ids)
-            ),
-        )
-    return unique
-
-
-def number_candidates(candidates: list[CardCandidate]) -> list[CardCandidate]:
-    return [
-        replace(candidate, card_id=f"c_{index:04d}")
-        for index, candidate in enumerate(candidates, start=1)
-    ]
-
-
 def save_cards_diagnostic(
     path: Path,
     *,
@@ -423,6 +349,7 @@ def generate_card_candidates(
     destination: Path,
     diagnostic_path: Path,
     client: OllamaClient,
+    expressions_path: Path | None = None,
 ) -> CardCandidateCollection:
     if isinstance(client, OllamaClient):
         client.format_schema = CARD_RESPONSE_SCHEMA
@@ -480,7 +407,15 @@ def generate_card_candidates(
                     f"Диагностика: {diagnostic_path}"
                 )
     knowledge_by_id = {item.id: item for item in items}
-    candidates = [proposal_to_candidate(item, knowledge_by_id) for item in proposals]
+    expressions_by_knowledge: dict[str, list] = defaultdict(list)
+    if expressions_path and expressions_path.exists():
+        for expression in load_target_expressions(expressions_path):
+            for knowledge_id in expression.knowledge_ids:
+                expressions_by_knowledge[knowledge_id].append(expression)
+    candidates = [
+        proposal_to_candidate(item, knowledge_by_id, expressions_by_knowledge)
+        for item in proposals
+    ]
     candidates = deduplicate_candidates(candidates)
     candidates = number_candidates(candidates)
     result = CardCandidateCollection(source, client.model, candidates)

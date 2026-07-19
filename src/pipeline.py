@@ -16,6 +16,7 @@ if __package__ in (None, ""):
     from src.review import KnowledgeReviewError, review_knowledge
     from src.semantic import SemanticSegmentationError, semantic_segment_transcript
     from src.transcription import TranscriptionError, resolve_device, transcribe_audio
+    from src.target_expressions import TargetExpressionError, extract_target_expressions
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from .cards import CardGenerationError, generate_card_candidates
@@ -26,6 +27,7 @@ else:
     from .review import KnowledgeReviewError, review_knowledge
     from .semantic import SemanticSegmentationError, semantic_segment_transcript
     from .transcription import TranscriptionError, resolve_device, transcribe_audio
+    from .target_expressions import TargetExpressionError, extract_target_expressions
 
 LOGGER = logging.getLogger("anki_pipeline")
 
@@ -54,13 +56,38 @@ def run_pipeline(
     knowledge_max_items_per_segment: int = 12,
     review_knowledge_items: bool = False,
     generate_cards: bool = False,
+    extract_expressions: bool = False,
+    target_language: str = "ja",
+    target_glossary: Path | None = None,
 ) -> Path:
     paths = build_result_paths(video)
-    if sum((extract_knowledge_items, review_knowledge_items, generate_cards)) > 1:
+    if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions)) > 1:
         raise ValueError(
             "Используйте только один из флагов --extract-knowledge, "
-            "--review-knowledge или --generate-card-candidates за запуск."
+            "--review-knowledge, --extract-target-expressions или "
+            "--generate-card-candidates за запуск."
         )
+
+    if extract_expressions:
+        if paths.target_expressions_json.exists() and not force:
+            LOGGER.info("Выражения уже существуют: %s", paths.target_expressions_json)
+            return paths.target_expressions_json
+        if not paths.knowledge_items_json.exists():
+            raise TargetExpressionError(
+                "Не найден knowledge_items.json. Сначала выполните --extract-knowledge."
+            )
+        LOGGER.info("Извлечение выражений языка %s: model=%s", target_language, ollama_model)
+        client = OllamaClient(ollama_model, ollama_url, ollama_timeout)
+        extract_target_expressions(
+            paths.knowledge_items_json,
+            paths.target_expressions_json,
+            paths.target_expressions_diagnostic_json,
+            client,
+            target_language=target_language,
+            glossary_path=target_glossary or Path("glossaries") / f"{target_language}.json",
+        )
+        LOGGER.info("Целевые выражения: %s", paths.target_expressions_json)
+        return paths.target_expressions_json
 
     if generate_cards:
         if paths.card_candidates_json.exists() and not force:
@@ -82,6 +109,7 @@ def run_pipeline(
             paths.card_candidates_json,
             paths.cards_diagnostic_json,
             client,
+            paths.target_expressions_json,
         )
         LOGGER.info("Кандидаты карточек: %s", paths.card_candidates_json)
         return paths.card_candidates_json
@@ -255,6 +283,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Создать кандидаты будущих карточек",
     )
+    parser.add_argument(
+        "--extract-target-expressions",
+        action="store_true",
+        help="Найти выражения изучаемого языка и их оригинальное написание",
+    )
+    parser.add_argument(
+        "--target-language",
+        default="ja",
+        help="Код изучаемого языка (default: ja)",
+    )
+    parser.add_argument(
+        "--target-glossary",
+        type=Path,
+        help="Локальный JSON-глоссарий; по умолчанию glossaries/<language>.json",
+    )
     return parser
 
 
@@ -280,6 +323,9 @@ def main(argv: list[str] | None = None) -> int:
             knowledge_max_items_per_segment=args.knowledge_max_items_per_segment,
             review_knowledge_items=args.review_knowledge,
             generate_cards=args.generate_card_candidates,
+            extract_expressions=args.extract_target_expressions,
+            target_language=args.target_language,
+            target_glossary=args.target_glossary,
         )
     except (
         FileNotFoundError,
@@ -291,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         KnowledgeExtractionError,
         KnowledgeReviewError,
         CardGenerationError,
+        TargetExpressionError,
     ) as exc:
         LOGGER.error("%s", exc)
         return 1
