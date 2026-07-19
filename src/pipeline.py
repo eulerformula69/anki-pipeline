@@ -5,10 +5,17 @@ import logging
 import sys
 from pathlib import Path
 
-from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
-from .output import save_transcript_json, save_transcript_text
-from .paths import build_result_paths
-from .transcription import TranscriptionError, resolve_device, transcribe_audio
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from src.output import save_transcript_json, save_transcript_text
+    from src.paths import build_result_paths
+    from src.transcription import TranscriptionError, resolve_device, transcribe_audio
+else:
+    from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from .output import save_transcript_json, save_transcript_text
+    from .paths import build_result_paths
+    from .transcription import TranscriptionError, resolve_device, transcribe_audio
 
 LOGGER = logging.getLogger("anki_pipeline")
 
@@ -88,4 +95,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

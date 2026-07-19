@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -18,3 +20,14 @@ def test_existing_input_file_is_valid(tmp_path) -> None:
 
     validate_input(video)
 
+
+def test_pipeline_supports_direct_script_invocation() -> None:
+    result = subprocess.run(
+        [sys.executable, "src/pipeline.py", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "--device" in result.stdout

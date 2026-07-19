@@ -52,6 +52,12 @@ cuDNN. При проблемах используйте `--device cpu`.
 python -m src.pipeline "input/video.mp4"
 ```
 
+Также поддерживается прямой запуск файла:
+
+```powershell
+py src/pipeline.py "input/video.mp4"
+```
+
 Все параметры:
 
 ```powershell
