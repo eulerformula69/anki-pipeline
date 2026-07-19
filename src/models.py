@@ -141,6 +141,7 @@ class TargetExpression:
     source_transcript_segment_ids: list[int]
     verification: str
     confidence: float
+    type: str = "term"
 
 
 @dataclass(frozen=True)

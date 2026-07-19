@@ -4,7 +4,32 @@
     {
       "romanization": "datte",
       "surface": "だって",
-      "reading": "だって"
+      "reading": "だって",
+      "type": "term"
+    },
+    {
+      "romanization": "ashita wa hare datte",
+      "surface": "明日は晴れだって",
+      "reading": "あしたははれだって",
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "watashi datte dekiru",
+      "surface": "私だってできる",
+      "reading": "わたしだってできる",
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "watashi datte hottokeeki ga tsukureru",
+      "surface": "私だってホットケーキが作れる",
+      "reading": "わたしだってほっとけーきがつくれる",
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "kore kara mo yoroshiku onegai shimasu",
+      "surface": "これからもよろしくお願いします",
+      "reading": "これからもよろしくおねがいします",
+      "type": "example_sentence"
     }
   ]
 }

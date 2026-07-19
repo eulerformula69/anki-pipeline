@@ -410,6 +410,8 @@ def generate_card_candidates(
     expressions_by_knowledge: dict[str, list] = defaultdict(list)
     if expressions_path and expressions_path.exists():
         for expression in load_target_expressions(expressions_path):
+            if expression.verification != "verified":
+                continue
             for knowledge_id in expression.knowledge_ids:
                 expressions_by_knowledge[knowledge_id].append(expression)
     candidates = [

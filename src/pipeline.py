@@ -79,6 +79,7 @@ def run_pipeline(
         LOGGER.info("Извлечение выражений языка %s: model=%s", target_language, ollama_model)
         client = OllamaClient(ollama_model, ollama_url, ollama_timeout)
         extract_target_expressions(
+            paths.transcript_json,
             paths.knowledge_items_json,
             paths.target_expressions_json,
             paths.target_expressions_diagnostic_json,

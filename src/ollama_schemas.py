@@ -77,7 +77,7 @@ def card_response_schema(card_types: set[str], fields: set[str]) -> dict:
 
 def target_expression_response_schema() -> dict:
     fields = [
-        "surface", "reading", "romanization", "meaning", "knowledge_ids",
+        "type", "surface", "reading", "romanization", "meaning",
         "source_transcript_segment_ids", "confidence",
     ]
     return {
@@ -88,11 +88,14 @@ def target_expression_response_schema() -> dict:
                 "items": {
                     "type": "object",
                     "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["term", "grammar_pattern", "example_sentence"],
+                        },
                         "surface": {"type": "string"},
                         "reading": {"type": "string"},
                         "romanization": {"type": "string"},
                         "meaning": {"type": "string"},
-                        "knowledge_ids": {"type": "array", "items": {"type": "string"}},
                         "source_transcript_segment_ids": {
                             "type": "array", "items": {"type": "integer"}
                         },

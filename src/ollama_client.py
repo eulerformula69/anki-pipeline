@@ -36,8 +36,12 @@ class OllamaClient:
     timeout: float = 120.0
     opener: Callable[..., Any] = field(default=request.urlopen, repr=False)
     format_schema: dict[str, Any] | None = field(default=None, repr=False)
+    num_predict: int | None = field(default=None, repr=False)
 
     def generate_json(self, prompt: str) -> tuple[dict[str, Any], str]:
+        options: dict[str, Any] = {"temperature": 0}
+        if self.num_predict is not None:
+            options["num_predict"] = self.num_predict
         payload = json.dumps(
             {
                 "model": self.model,
@@ -45,7 +49,7 @@ class OllamaClient:
                 "stream": False,
                 "format": self.format_schema or "json",
                 "think": False,
-                "options": {"temperature": 0},
+                "options": options,
             },
             ensure_ascii=False,
         ).encode("utf-8")

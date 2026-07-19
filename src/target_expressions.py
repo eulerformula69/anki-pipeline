@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .models import TargetExpression, TargetExpressionCollection
+from .models import TargetExpression, TargetExpressionCollection, TranscriptSegment
 from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
 from .ollama_schemas import target_expression_response_schema
 from .progress import ActivityIndicator
@@ -27,17 +27,24 @@ class TargetExpressionError(RuntimeError):
     pass
 
 
-def build_prompt(items: list, language: str, correction: str = "") -> str:
-    payload = [item.to_dict() for item in items]
-    return f"""Find words, phrases, and grammar patterns in the TARGET language.
+def build_prompt(segments: list[TranscriptSegment], language: str, correction: str = "") -> str:
+    payload = [segment.__dict__ for segment in segments]
+    return f"""Extract the useful target-language material from this mixed-language transcript.
 Target language code: {language}.
-The explanations may be in another language. Preserve that language in meaning.
+Return isolated words, grammar constructions, and complete example sentences.
+type must be term, grammar_pattern, or example_sentence.
+The transcript may contain inaccurate romanization. Reconstruct native writing cautiously.
+The explanations may be in another language. Use that language in meaning.
 surface must use the target language's native writing system (for Japanese: kana/kanji).
 reading is the native pronunciation aid (for Japanese: kana). romanization is Latin script.
-Do not invent an expression when the evidence is ambiguous. Return each expression once.
-For Japanese, surface and reading MUST contain Japanese characters; for example
+Include an example_sentence when the speaker gives a target-language example, not only its words.
+Return at most 12 items. Prioritize complete example sentences, then grammar patterns,
+then important vocabulary. Do not list every particle separately.
+Do not turn ordinary English explanation into Japanese. Return each expression once per window.
+source_transcript_segment_ids must come only from INPUT. Do not return knowledge_ids.
+For Japanese, surface and reading MUST contain Japanese characters. Examples:
 surface="だって", reading="だって", romanization="datte". Never put romaji in surface.
-knowledge_ids and source_transcript_segment_ids must come only from INPUT.
+surface="明日は晴れだって", reading="あしたははれだって", romanization="ashita wa hare datte".
 confidence is confidence that surface exactly matches the spoken romanized expression.
 Return strict JSON only.{correction}
 
@@ -59,12 +66,13 @@ def load_glossary(path: Path | None) -> dict[str, dict[str, str]]:
 def parse_response(
     data: dict[str, Any], items: list, language: str,
     glossary: dict[str, dict[str, str]] | None = None,
+    allowed_source_ids: set[int] | None = None,
 ) -> list[TargetExpression]:
     raw_items = data.get("expressions")
     if set(data) != {"expressions"} or not isinstance(raw_items, list):
         raise TargetExpressionError("Ответ должен содержать только массив expressions.")
     knowledge = {item.id: item for item in items}
-    allowed_segments = {
+    allowed_segments = allowed_source_ids or {
         segment_id for item in items for segment_id in item.source_transcript_segment_ids
     }
     seen: set[tuple[str, str]] = set()
@@ -75,14 +83,13 @@ def parse_response(
             errors.append(f"Expression {index}: ожидается объект.")
             continue
         required = {
-            "surface", "reading", "romanization", "meaning", "knowledge_ids",
+            "type", "surface", "reading", "romanization", "meaning",
             "source_transcript_segment_ids", "confidence",
         }
         if set(raw) != required:
             errors.append(f"Expression {index}: неверный набор полей.")
             continue
         strings = [raw.get(key) for key in ("surface", "reading", "romanization", "meaning")]
-        ids = raw.get("knowledge_ids")
         source_ids = raw.get("source_transcript_segment_ids")
         confidence = raw.get("confidence")
         if not all(isinstance(value, str) and value.strip() for value in strings):
@@ -99,22 +106,23 @@ def parse_response(
         if native_pattern and (
             not native_pattern.search(raw["surface"])
             or not native_pattern.search(raw["reading"])
+            or (language == "ja" and re.search(r"[A-Za-z]", raw["surface"] + raw["reading"]))
         ):
             errors.append(
                 f"Expression {index}: surface и reading должны использовать письменность {language}."
             )
             continue
-        if not isinstance(ids, list) or not ids or any(item not in knowledge for item in ids):
-            errors.append(f"Expression {index}: неизвестные или пустые knowledge_ids.")
+        expression_type = (
+            str(glossary_entry.get("type"))
+            if glossary_entry and glossary_entry.get("type")
+            else raw.get("type")
+        )
+        if expression_type not in {"term", "grammar_pattern", "example_sentence"}:
+            errors.append(f"Expression {index}: неизвестный type.")
             continue
-        expected_ids = {
-            segment_id for item_id in ids
-            for segment_id in knowledge[item_id].source_transcript_segment_ids
-        }
         if (
             not isinstance(source_ids, list) or not source_ids
             or any(not isinstance(value, int) or value not in allowed_segments for value in source_ids)
-            or not set(source_ids).issubset(expected_ids)
         ):
             errors.append(f"Expression {index}: неверные source_transcript_segment_ids.")
             continue
@@ -129,53 +137,99 @@ def parse_response(
             id=f"e_{len(result) + 1:04d}", language=language,
             surface=raw["surface"].strip(), reading=raw["reading"].strip(),
             romanization=raw["romanization"].strip(), meaning=raw["meaning"].strip(),
-            knowledge_ids=list(dict.fromkeys(ids)), source_transcript_segment_ids=sorted(set(source_ids)),
+            knowledge_ids=[
+                item.id for item in items
+                if set(item.source_transcript_segment_ids) & set(source_ids)
+            ],
+            source_transcript_segment_ids=sorted(set(source_ids)),
             verification="verified" if glossary_entry else "needs_review",
             confidence=float(confidence),
+            type=expression_type,
         ))
-    if errors:
+    if errors and not result:
         raise TargetExpressionError(" | ".join(errors))
+    if errors:
+        LOGGER.warning(
+            "Пропущено некорректных выражений: %d; корректные сохранены.", len(errors)
+        )
     return result
 
 
 def extract_target_expressions(
-    knowledge_path: Path, destination: Path, diagnostic_path: Path,
+    transcript_path: Path, knowledge_path: Path, destination: Path, diagnostic_path: Path,
     client: OllamaClient, *, target_language: str,
     glossary_path: Path | None = None,
 ) -> TargetExpressionCollection:
     if isinstance(client, OllamaClient):
         client.format_schema = SCHEMA
+        client.num_predict = 1400
     source, _, items = load_knowledge_items(knowledge_path)
+    try:
+        transcript_data = json.loads(transcript_path.read_text(encoding="utf-8"))
+        transcript_segments = [TranscriptSegment(**item) for item in transcript_data["segments"]]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise TargetExpressionError(f"Не удалось прочитать transcript.json: {exc}") from exc
     glossary = load_glossary(glossary_path)
-    responses: list[str] = []
-    error = ""
-    for attempt in range(2):
-        correction = ""
-        if attempt:
-            correction = f"\nPrevious response failed validation: {error}. Fix the complete response."
-        try:
-            with ActivityIndicator("Ollama Expressions" + (" (retry)" if attempt else "")):
-                data, raw = client.generate_json(build_prompt(items, target_language, correction))
-            responses.append(raw)
-            expressions = parse_response(data, items, target_language, glossary)
-            result = TargetExpressionCollection(source, client.model, target_language, expressions)
-            save_json_atomic(result.to_dict(), destination)
-            diagnostic_path.unlink(missing_ok=True)
-            return result
-        except OllamaInvalidResponseError as exc:
-            responses.append(exc.raw_response)
-            error = str(exc)
-        except TargetExpressionError as exc:
-            error = str(exc)
-        except OllamaError:
-            raise
-    save_json_atomic({
-        "error": error, "ollama_responses": responses, "model": client.model,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }, diagnostic_path)
-    raise TargetExpressionError(
-        f"Ollama дважды вернул некорректные выражения. Диагностика: {diagnostic_path}"
-    )
+    all_expressions: list[TargetExpression] = []
+    window_size, overlap = 12, 2
+    starts = range(0, len(transcript_segments), window_size - overlap)
+    windows = [transcript_segments[start:start + window_size] for start in starts]
+    for window_number, window in enumerate(windows, start=1):
+        if not window:
+            continue
+        responses: list[str] = []
+        error = ""
+        for attempt in range(2):
+            correction = "" if not attempt else (
+                f"\nVALIDATION ERROR: {error}. Correct the complete JSON now."
+            )
+            try:
+                label = f"Ollama Expressions: окно {window_number}/{len(windows)}"
+                with ActivityIndicator(label + (" (retry)" if attempt else "")):
+                    data, raw = client.generate_json(build_prompt(window, target_language, correction))
+                responses.append(raw)
+                all_expressions.extend(parse_response(
+                    data, items, target_language, glossary,
+                    {segment.id for segment in window},
+                ))
+                break
+            except OllamaInvalidResponseError as exc:
+                responses.append(exc.raw_response)
+                error = str(exc)
+            except TargetExpressionError as exc:
+                error = str(exc)
+            except OllamaError:
+                raise
+            if attempt == 1:
+                save_json_atomic({
+                    "window": window_number, "error": error,
+                    "ollama_responses": responses, "model": client.model,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }, diagnostic_path)
+                raise TargetExpressionError(
+                    f"Ollama дважды вернул некорректные выражения. Диагностика: {diagnostic_path}"
+                )
+    merged: dict[tuple[str, str], TargetExpression] = {}
+    for expression in all_expressions:
+        key = (expression.type, expression.surface)
+        previous = merged.get(key)
+        if previous is None:
+            merged[key] = expression
+        else:
+            merged[key] = TargetExpression(
+                **{**previous.__dict__,
+                   "knowledge_ids": list(dict.fromkeys(previous.knowledge_ids + expression.knowledge_ids)),
+                   "source_transcript_segment_ids": sorted(set(previous.source_transcript_segment_ids + expression.source_transcript_segment_ids)),
+                   "confidence": max(previous.confidence, expression.confidence)}
+            )
+    expressions = [
+        TargetExpression(**{**item.__dict__, "id": f"e_{index:04d}"})
+        for index, item in enumerate(merged.values(), start=1)
+    ]
+    result = TargetExpressionCollection(source, client.model, target_language, expressions)
+    save_json_atomic(result.to_dict(), destination)
+    diagnostic_path.unlink(missing_ok=True)
+    return result
 
 
 def load_target_expressions(path: Path) -> list[TargetExpression]:

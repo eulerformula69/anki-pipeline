@@ -21,8 +21,9 @@ def item() -> KnowledgeItem:
 def valid_response():
     return {
         "expressions": [{
+            "type": "term",
             "surface": "だって", "reading": "だって", "romanization": "datte",
-            "meaning": "Introduces a reason", "knowledge_ids": ["k_0001"],
+            "meaning": "Introduces a reason",
             "source_transcript_segment_ids": [3, 4], "confidence": 0.9,
         }]
     }
@@ -47,6 +48,14 @@ def test_unknown_source_id_is_rejected() -> None:
 def test_japanese_romanized_surface_is_rejected() -> None:
     data = valid_response()
     data["expressions"][0]["surface"] = "datte"
+
+    with pytest.raises(TargetExpressionError, match="письменность"):
+        parse_response(data, [item()], "ja")
+
+
+def test_mixed_latin_and_japanese_surface_is_rejected() -> None:
+    data = valid_response()
+    data["expressions"][0]["surface"] = "私 datte"
 
     with pytest.raises(TargetExpressionError, match="письменность"):
         parse_response(data, [item()], "ja")
@@ -87,11 +96,16 @@ def test_extraction_retries_without_overwriting_existing_result(tmp_path) -> Non
     }), encoding="utf-8")
     destination = tmp_path / "expressions.json"
     diagnostic = tmp_path / "diagnostic.json"
+    transcript = tmp_path / "transcript.json"
+    transcript.write_text(json.dumps({"segments": [
+        {"id": 3, "start": 1.0, "end": 2.0, "text": "datte"},
+        {"id": 4, "start": 2.0, "end": 3.0, "text": "Japanese grammar"},
+    ]}), encoding="utf-8")
     invalid = ({"expressions": [{"surface": "だって"}]}, "bad")
     client = Client([invalid, (valid_response(), "good")])
 
     result = extract_target_expressions(
-        knowledge, destination, diagnostic, client, target_language="ja"
+        transcript, knowledge, destination, diagnostic, client, target_language="ja"
     )
 
     assert client.calls == 2
