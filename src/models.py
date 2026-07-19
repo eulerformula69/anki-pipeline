@@ -82,3 +82,47 @@ class KnowledgeCollection:
             "model": self.model,
             "knowledge_items": [item.to_dict() for item in self.knowledge_items],
         }
+
+
+@dataclass(frozen=True)
+class KnowledgeReview:
+    knowledge_id: str
+    status: str
+    confidence: float
+    issues: list[str]
+    recommended_action: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class KnowledgeReviewCollection:
+    source: str
+    model: str
+    reviews: list[KnowledgeReview]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class CardCandidate:
+    card_id: str
+    knowledge_ids: list[str]
+    card_type: str
+    front: str
+    back: str
+    extra: str
+    difficulty: int
+    importance: int
+    tags: list[str]
+    source_transcript_segment_ids: list[int]
+
+
+@dataclass(frozen=True)
+class CardCandidateCollection:
+    source: str
+    model: str
+    card_candidates: list[CardCandidate]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

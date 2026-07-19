@@ -96,3 +96,52 @@ def test_extract_knowledge_does_not_require_original_video(tmp_path, monkeypatch
     run_pipeline(video, extract_knowledge_items=True)
 
     assert called
+
+
+def test_review_does_not_run_previous_stages_or_require_video(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    result_dir = Path("output/video")
+    result_dir.mkdir(parents=True)
+    (result_dir / "knowledge_items.json").write_text("{}", encoding="utf-8")
+    called = False
+
+    def fake_review(*args, **kwargs) -> None:
+        nonlocal called
+        called = True
+
+    def forbidden(*args, **kwargs) -> None:
+        raise AssertionError("Предыдущий этап не должен запускаться")
+
+    monkeypatch.setattr("src.pipeline.review_knowledge", fake_review)
+    monkeypatch.setattr("src.pipeline.ensure_ffmpeg", forbidden)
+    monkeypatch.setattr("src.pipeline.transcribe_audio", forbidden)
+
+    result = run_pipeline(Path("input/video.mkv"), review_knowledge_items=True)
+
+    assert called
+    assert result == result_dir / "knowledge_review.json"
+
+
+def test_cards_do_not_run_previous_stages_or_require_video(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    result_dir = Path("output/video")
+    result_dir.mkdir(parents=True)
+    (result_dir / "knowledge_items.json").write_text("{}", encoding="utf-8")
+    (result_dir / "knowledge_review.json").write_text("{}", encoding="utf-8")
+    called = False
+
+    def fake_cards(*args, **kwargs) -> None:
+        nonlocal called
+        called = True
+
+    def forbidden(*args, **kwargs) -> None:
+        raise AssertionError("Предыдущий этап не должен запускаться")
+
+    monkeypatch.setattr("src.pipeline.generate_card_candidates", fake_cards)
+    monkeypatch.setattr("src.pipeline.ensure_ffmpeg", forbidden)
+    monkeypatch.setattr("src.pipeline.transcribe_audio", forbidden)
+
+    result = run_pipeline(Path("input/video.mkv"), generate_cards=True)
+
+    assert called
+    assert result == result_dir / "card_candidates.json"

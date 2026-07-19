@@ -14,6 +14,10 @@ class ResultPaths:
     semantic_diagnostic_json: Path
     knowledge_items_json: Path
     knowledge_diagnostic_json: Path
+    knowledge_review_json: Path
+    review_diagnostic_json: Path
+    card_candidates_json: Path
+    cards_diagnostic_json: Path
 
 
 def build_result_paths(video: Path, output_root: Path = Path("output")) -> ResultPaths:
@@ -27,4 +31,8 @@ def build_result_paths(video: Path, output_root: Path = Path("output")) -> Resul
         semantic_diagnostic_json=directory / "semantic_segments_diagnostic.json",
         knowledge_items_json=directory / "knowledge_items.json",
         knowledge_diagnostic_json=directory / "knowledge_items_diagnostic.json",
+        knowledge_review_json=directory / "knowledge_review.json",
+        review_diagnostic_json=directory / "knowledge_review_diagnostic.json",
+        card_candidates_json=directory / "card_candidates.json",
+        cards_diagnostic_json=directory / "card_candidates_diagnostic.json",
     )

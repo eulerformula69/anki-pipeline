@@ -4,11 +4,12 @@
 `faster-whisper` создаёт транскрипцию с таймкодами. Генерации Anki-карточек в
 проекте пока нет. Опционально локальная модель Ollama группирует исходные
 таймкодированные фрагменты в смысловые блоки, а затем извлекает из них атомарные
-учебные знания. Knowledge items ещё не являются Anki-карточками.
+учебные знания, проверяет их качество и подготавливает кандидаты карточек.
+Проект всё ещё не создаёт Anki-файлы и ничего не импортирует в Anki.
 
 ## Требования
 
-- Windows и Python 3.10–3.12;
+- Windows и Python 3.10–3.13;
 - FFmpeg в `PATH`;
 - NVIDIA GPU с рабочим CUDA-окружением — необязательно, есть CPU fallback;
 - интернет нужен только при первой загрузке модели Whisper.
@@ -70,6 +71,8 @@ python -m src.pipeline "input/video.mp4" --device cpu
 python -m src.pipeline "input/video.mp4" --force
 python -m src.pipeline "input/video.mp4" --semantic-segment
 python -m src.pipeline "input/video.mp4" --extract-knowledge
+python -m src.pipeline "input/video.mp4" --review-knowledge
+python -m src.pipeline "input/video.mp4" --generate-card-candidates
 ```
 
 - `--model small` задаёт модель (по умолчанию `small`);
@@ -84,6 +87,8 @@ python -m src.pipeline "input/video.mp4" --extract-knowledge
 - `--knowledge-language source|ru|en` выбирает язык тезисов и пояснений;
 - `--knowledge-min-importance 1` фильтрует менее важные знания после проверки;
 - `--knowledge-max-items-per-segment 12` ограничивает результат одного блока.
+- `--review-knowledge` оценивает качество готовых знаний;
+- `--generate-card-candidates` создаёт текстовые кандидаты карточек.
 
 Без `--force` существующий `audio.wav` используется повторно, а при наличии обоих
 файлов транскрипции модель не запускается. Результат для `input/video.mp4`:
@@ -98,7 +103,9 @@ output/video/
 ├── transcript.json
 ├── transcript.txt
 ├── semantic_segments.json
-└── knowledge_items.json
+├── knowledge_items.json
+├── knowledge_review.json
+└── card_candidates.json
 ```
 
 Пример `transcript.txt`:
@@ -199,6 +206,74 @@ Evidence должен точно состоять из текста этих ф�
 — подтверждаемость, а не максимальная полнота. После двух некорректных ответов
 создаётся `knowledge_items_diagnostic.json`, существующий корректный результат не
 повреждается.
+
+## Knowledge Review
+
+Review — отдельный редакторский этап, который не меняет знания, а оценивает их
+пригодность для будущих карточек:
+
+```powershell
+python -m src.pipeline "input/video.mp4" --review-knowledge
+```
+
+Каждый knowledge item получает один из статусов `keep`, `merge`, `split` или
+`discard`, confidence от 0 до 1, рекомендуемое действие и список проблем. Среди
+проблем поддерживаются `too_general`, `too_specific`, `contains_two_facts`,
+`duplicate`, `weak_example`, `redundant`, `unclear` и `low_learning_value`.
+
+Пример записи в `knowledge_review.json`:
+
+```json
+{
+  "knowledge_id": "k_0001",
+  "status": "keep",
+  "confidence": 0.94,
+  "issues": [],
+  "recommended_action": "none",
+  "reason": "The item contains one independently testable fact."
+}
+```
+
+Программа проверяет полное покрытие knowledge ID, все enum-значения и confidence.
+После второй ошибки сохраняется `knowledge_review_diagnostic.json`, не повреждая
+существующий корректный review.
+
+## Card Candidates
+
+Следующий независимый этап читает знания и review:
+
+```powershell
+python -m src.pipeline "input/video.mp4" --generate-card-candidates
+```
+
+`discard` не создаёт карточек, `split` даёт 2–5 кандидатов, а совместимые `merge`
+могут стать одной карточкой. Поддерживаются только `basic`, `reverse`, `cloze`,
+`comparison`, `process`, `mistake` и `definition`.
+
+Пример `card_candidates.json`:
+
+```json
+{
+  "card_id": "c_0001",
+  "knowledge_ids": ["k_0001"],
+  "card_type": "definition",
+  "front": "What does datte consist of?",
+  "back": "It consists of the copula da and the quotation form te.",
+  "extra": "",
+  "difficulty": 3,
+  "importance": 5,
+  "tags": ["definition"],
+  "source_transcript_segment_ids": [7, 8]
+}
+```
+
+`card_id`, importance, tags и source IDs формирует программа. Она проверяет
+пустые и повторяющиеся вопросы, допустимые типы, длину front до 120 символов,
+длину back до 500 символов и отсутствие карточек из discard-знаний.
+
+Это ещё не Anki: кандидаты не содержат HTML-шаблонов, deck/note types,
+планирования повторений и не экспортируются в CSV, APKG или AnkiConnect. Они
+являются проверенным промежуточным JSON для следующего этапа разработки.
 
 ## Тесты
 

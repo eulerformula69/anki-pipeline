@@ -8,18 +8,22 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from src.cards import CardGenerationError, generate_card_candidates
     from src.knowledge import KnowledgeExtractionError, extract_knowledge
     from src.output import save_transcript_json, save_transcript_text
     from src.ollama_client import OllamaClient, OllamaError
     from src.paths import build_result_paths
+    from src.review import KnowledgeReviewError, review_knowledge
     from src.semantic import SemanticSegmentationError, semantic_segment_transcript
     from src.transcription import TranscriptionError, resolve_device, transcribe_audio
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from .cards import CardGenerationError, generate_card_candidates
     from .knowledge import KnowledgeExtractionError, extract_knowledge
     from .output import save_transcript_json, save_transcript_text
     from .ollama_client import OllamaClient, OllamaError
     from .paths import build_result_paths
+    from .review import KnowledgeReviewError, review_knowledge
     from .semantic import SemanticSegmentationError, semantic_segment_transcript
     from .transcription import TranscriptionError, resolve_device, transcribe_audio
 
@@ -48,8 +52,58 @@ def run_pipeline(
     knowledge_language: str = "source",
     knowledge_min_importance: int = 1,
     knowledge_max_items_per_segment: int = 12,
+    review_knowledge_items: bool = False,
+    generate_cards: bool = False,
 ) -> Path:
     paths = build_result_paths(video)
+    if sum((extract_knowledge_items, review_knowledge_items, generate_cards)) > 1:
+        raise ValueError(
+            "Используйте только один из флагов --extract-knowledge, "
+            "--review-knowledge или --generate-card-candidates за запуск."
+        )
+
+    if generate_cards:
+        if paths.card_candidates_json.exists() and not force:
+            LOGGER.info("Кандидаты карточек уже существуют: %s", paths.card_candidates_json)
+            return paths.card_candidates_json
+        if not paths.knowledge_items_json.exists():
+            raise CardGenerationError(
+                "Не найден knowledge_items.json. Сначала выполните --extract-knowledge."
+            )
+        if not paths.knowledge_review_json.exists():
+            raise CardGenerationError(
+                "Не найден knowledge_review.json. Сначала выполните --review-knowledge."
+            )
+        LOGGER.info("Генерация кандидатов карточек: model=%s", ollama_model)
+        client = OllamaClient(ollama_model, ollama_url, ollama_timeout)
+        generate_card_candidates(
+            paths.knowledge_items_json,
+            paths.knowledge_review_json,
+            paths.card_candidates_json,
+            paths.cards_diagnostic_json,
+            client,
+        )
+        LOGGER.info("Кандидаты карточек: %s", paths.card_candidates_json)
+        return paths.card_candidates_json
+
+    if review_knowledge_items:
+        if paths.knowledge_review_json.exists() and not force:
+            LOGGER.info("Knowledge Review уже существует: %s", paths.knowledge_review_json)
+            return paths.knowledge_review_json
+        if not paths.knowledge_items_json.exists():
+            raise KnowledgeReviewError(
+                "Не найден knowledge_items.json. Сначала выполните --extract-knowledge."
+            )
+        LOGGER.info("Knowledge Review через Ollama: model=%s", ollama_model)
+        client = OllamaClient(ollama_model, ollama_url, ollama_timeout)
+        review_knowledge(
+            paths.knowledge_items_json,
+            paths.knowledge_review_json,
+            paths.review_diagnostic_json,
+            client,
+        )
+        LOGGER.info("Knowledge Review: %s", paths.knowledge_review_json)
+        return paths.knowledge_review_json
 
     if extract_knowledge_items:
         if paths.knowledge_items_json.exists() and not force:
@@ -191,6 +245,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=12,
         help="Максимум знаний из одного смыслового блока (default: 12)",
     )
+    parser.add_argument(
+        "--review-knowledge",
+        action="store_true",
+        help="Оценить качество готовых knowledge items",
+    )
+    parser.add_argument(
+        "--generate-card-candidates",
+        action="store_true",
+        help="Создать кандидаты будущих карточек",
+    )
     return parser
 
 
@@ -214,6 +278,8 @@ def main(argv: list[str] | None = None) -> int:
             knowledge_language=args.knowledge_language,
             knowledge_min_importance=args.knowledge_min_importance,
             knowledge_max_items_per_segment=args.knowledge_max_items_per_segment,
+            review_knowledge_items=args.review_knowledge,
+            generate_cards=args.generate_card_candidates,
         )
     except (
         FileNotFoundError,
@@ -223,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
         OllamaError,
         SemanticSegmentationError,
         KnowledgeExtractionError,
+        KnowledgeReviewError,
+        CardGenerationError,
     ) as exc:
         LOGGER.error("%s", exc)
         return 1

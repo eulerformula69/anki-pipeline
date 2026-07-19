@@ -35,6 +35,7 @@ class OllamaClient:
     base_url: str = "http://localhost:11434"
     timeout: float = 120.0
     opener: Callable[..., Any] = field(default=request.urlopen, repr=False)
+    format_schema: dict[str, Any] | None = field(default=None, repr=False)
 
     def generate_json(self, prompt: str) -> tuple[dict[str, Any], str]:
         payload = json.dumps(
@@ -42,7 +43,7 @@ class OllamaClient:
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
-                "format": "json",
+                "format": self.format_schema or "json",
                 "think": False,
                 "options": {"temperature": 0},
             },
