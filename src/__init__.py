@@ -1,0 +1,2 @@
+"""Local video transcription pipeline."""
+
