@@ -8,6 +8,7 @@ from typing import Any
 
 from .models import SemanticSegment, SemanticTranscript, TranscriptSegment
 from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
+from .progress import ActivityIndicator
 
 LOGGER = logging.getLogger("anki_pipeline.semantic")
 
@@ -220,7 +221,11 @@ def semantic_segment_transcript(
         format_error: str | None = None
         for attempt in range(2):
             try:
-                data, raw = client.generate_json(build_prompt(window, format_error))
+                retry_label = " (повтор)" if attempt else ""
+                with ActivityIndicator(
+                    f"Ollama: окно {window_number}/{len(windows)}{retry_label}"
+                ):
+                    data, raw = client.generate_json(build_prompt(window, format_error))
                 responses.append(raw)
                 proposals = parse_proposals(data, window.core_ids)
                 all_proposals.extend(proposals)
