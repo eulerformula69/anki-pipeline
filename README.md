@@ -3,7 +3,8 @@
 Первый этап локального пайплайна: видео преобразуется в mono WAV 16 kHz, затем
 `faster-whisper` создаёт транскрипцию с таймкодами. Генерации Anki-карточек в
 проекте пока нет. Опционально локальная модель Ollama группирует исходные
-таймкодированные фрагменты в смысловые блоки.
+таймкодированные фрагменты в смысловые блоки, а затем извлекает из них атомарные
+учебные знания. Knowledge items ещё не являются Anki-карточками.
 
 ## Требования
 
@@ -68,6 +69,7 @@ python -m src.pipeline "input/video.mp4" --language ru
 python -m src.pipeline "input/video.mp4" --device cpu
 python -m src.pipeline "input/video.mp4" --force
 python -m src.pipeline "input/video.mp4" --semantic-segment
+python -m src.pipeline "input/video.mp4" --extract-knowledge
 ```
 
 - `--model small` задаёт модель (по умолчанию `small`);
@@ -78,6 +80,10 @@ python -m src.pipeline "input/video.mp4" --semantic-segment
 - `--ollama-model qwen3:8b` выбирает локальную модель;
 - `--ollama-url http://localhost:11434` задаёт адрес API;
 - `--ollama-timeout 120` задаёт таймаут одного запроса.
+- `--extract-knowledge` извлекает знания из готовых смысловых блоков;
+- `--knowledge-language source|ru|en` выбирает язык тезисов и пояснений;
+- `--knowledge-min-importance 1` фильтрует менее важные знания после проверки;
+- `--knowledge-max-items-per-segment 12` ограничивает результат одного блока.
 
 Без `--force` существующий `audio.wav` используется повторно, а при наличии обоих
 файлов транскрипции модель не запускается. Результат для `input/video.mp4`:
@@ -91,7 +97,8 @@ output/video/
 ├── audio.wav
 ├── transcript.json
 ├── transcript.txt
-└── semantic_segments.json
+├── semantic_segments.json
+└── knowledge_items.json
 ```
 
 Пример `transcript.txt`:
@@ -126,6 +133,72 @@ python -m src.pipeline "input/video.mp4" --semantic-segment
 ошибкой. Некорректный ответ запрашивается повторно один раз. После второй ошибки
 сырой ответ сохраняется в `semantic_segments_diagnostic.json`, а существующий
 корректный результат остаётся нетронутым.
+
+## Извлечение знаний
+
+После смысловой сегментации можно получить атомарные учебные тезисы:
+
+```powershell
+python -m src.pipeline "input/video.mp4" --extract-knowledge
+```
+
+Принудительно создать русскоязычный результат, оставив только importance 2–5:
+
+```powershell
+python -m src.pipeline "input/video.mp4" `
+  --extract-knowledge `
+  --knowledge-language ru `
+  --knowledge-min-importance 2 `
+  --force
+```
+
+`--extract-knowledge` — независимый этап: он читает готовые `transcript.json` и
+`semantic_segments.json`, не перезапуская FFmpeg, Whisper или смысловую
+сегментацию. Если результат существует, Ollama не вызывается без `--force`.
+
+Разрешённые типы знаний:
+
+- `definition` — определение;
+- `fact` — конкретный факт;
+- `cause_effect` — причинно-следственная связь;
+- `comparison` — сравнение;
+- `process` — процесс или последовательность;
+- `example` — пример;
+- `pitfall` — ошибка, исключение или предостережение.
+
+Пример `knowledge_items.json`:
+
+```json
+{
+  "source": "video.mp4",
+  "model": "qwen3:8b",
+  "knowledge_items": [
+    {
+      "id": "k_0001",
+      "semantic_segment_id": 0,
+      "type": "definition",
+      "statement": "Yojijukugo are Japanese four-character idioms.",
+      "explanation": "They express a complete idea in a compact form.",
+      "importance": 4,
+      "source_transcript_segment_ids": [3, 4],
+      "evidence": "Yojijukugo is exactly what it sounds like. Four plus character plus idiom."
+    }
+  ]
+}
+```
+
+Ollama выбирает только тип, тезис, пояснение, importance и минимальные source IDs.
+Evidence программа всегда собирает сама из оригинальной транскрипции. Регистр и
+пробелы нормализуются только при проверке; в файл записывается исходный текст.
+
+Чтобы вручную проверить знание, найдите значения из
+`source_transcript_segment_ids` в массиве `segments` файла `transcript.json`.
+Evidence должен точно состоять из текста этих фрагментов.
+
+Локальная модель может пропустить неочевидный факт, поэтому приоритет этого этапа
+— подтверждаемость, а не максимальная полнота. После двух некорректных ответов
+создаётся `knowledge_items_diagnostic.json`, существующий корректный результат не
+повреждается.
 
 ## Тесты
 

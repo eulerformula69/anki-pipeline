@@ -8,6 +8,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from src.knowledge import KnowledgeExtractionError, extract_knowledge
     from src.output import save_transcript_json, save_transcript_text
     from src.ollama_client import OllamaClient, OllamaError
     from src.paths import build_result_paths
@@ -15,6 +16,7 @@ if __package__ in (None, ""):
     from src.transcription import TranscriptionError, resolve_device, transcribe_audio
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from .knowledge import KnowledgeExtractionError, extract_knowledge
     from .output import save_transcript_json, save_transcript_text
     from .ollama_client import OllamaClient, OllamaError
     from .paths import build_result_paths
@@ -42,9 +44,47 @@ def run_pipeline(
     ollama_model: str = "qwen3:8b",
     ollama_url: str = "http://localhost:11434",
     ollama_timeout: float = 120.0,
+    extract_knowledge_items: bool = False,
+    knowledge_language: str = "source",
+    knowledge_min_importance: int = 1,
+    knowledge_max_items_per_segment: int = 12,
 ) -> Path:
-    validate_input(video)
     paths = build_result_paths(video)
+
+    if extract_knowledge_items:
+        if paths.knowledge_items_json.exists() and not force:
+            LOGGER.info("Учебные знания уже существуют: %s", paths.knowledge_items_json)
+            return paths.knowledge_items_json
+        if not paths.transcript_json.exists():
+            raise KnowledgeExtractionError(
+                "Не найден transcript.json. Сначала запустите транскрибацию видео."
+            )
+        if not paths.semantic_segments_json.exists():
+            raise KnowledgeExtractionError(
+                "Не найден semantic_segments.json. Сначала выполните: "
+                f'py -m src.pipeline "{video}" --semantic-segment'
+            )
+        LOGGER.info("Извлечение атомарных знаний: model=%s", ollama_model)
+        client = OllamaClient(
+            model=ollama_model,
+            base_url=ollama_url,
+            timeout=ollama_timeout,
+        )
+        extract_knowledge(
+            paths.transcript_json,
+            paths.semantic_segments_json,
+            paths.knowledge_items_json,
+            paths.knowledge_diagnostic_json,
+            client,
+            language=knowledge_language,
+            min_importance=knowledge_min_importance,
+            max_items_per_segment=knowledge_max_items_per_segment,
+        )
+        LOGGER.info("Учебные знания: %s", paths.knowledge_items_json)
+        LOGGER.info("Готово: %s", paths.directory)
+        return paths.knowledge_items_json
+
+    validate_input(video)
 
     if paths.transcript_json.exists() and paths.transcript_txt.exists() and not force:
         LOGGER.info("Транскрипция уже существует: %s", paths.transcript_json)
@@ -126,6 +166,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=120.0,
         help="Таймаут одного запроса к Ollama в секундах",
     )
+    parser.add_argument(
+        "--extract-knowledge",
+        action="store_true",
+        help="Извлечь атомарные знания из готовых смысловых блоков",
+    )
+    parser.add_argument(
+        "--knowledge-language",
+        choices=("source", "ru", "en"),
+        default="source",
+        help="Язык тезисов и пояснений (default: source)",
+    )
+    parser.add_argument(
+        "--knowledge-min-importance",
+        type=int,
+        choices=range(1, 6),
+        default=1,
+        metavar="1-5",
+        help="Минимальная importance после проверки (default: 1)",
+    )
+    parser.add_argument(
+        "--knowledge-max-items-per-segment",
+        type=int,
+        default=12,
+        help="Максимум знаний из одного смыслового блока (default: 12)",
+    )
     return parser
 
 
@@ -145,6 +210,10 @@ def main(argv: list[str] | None = None) -> int:
             ollama_model=args.ollama_model,
             ollama_url=args.ollama_url,
             ollama_timeout=args.ollama_timeout,
+            extract_knowledge_items=args.extract_knowledge,
+            knowledge_language=args.knowledge_language,
+            knowledge_min_importance=args.knowledge_min_importance,
+            knowledge_max_items_per_segment=args.knowledge_max_items_per_segment,
         )
     except (
         FileNotFoundError,
@@ -153,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         TranscriptionError,
         OllamaError,
         SemanticSegmentationError,
+        KnowledgeExtractionError,
     ) as exc:
         LOGGER.error("%s", exc)
         return 1

@@ -10,4 +10,7 @@ def test_build_result_paths() -> None:
     assert paths.audio == Path("results/lesson/audio.wav")
     assert paths.transcript_json == Path("results/lesson/transcript.json")
     assert paths.transcript_txt == Path("results/lesson/transcript.txt")
-
+    assert paths.knowledge_items_json == Path("results/lesson/knowledge_items.json")
+    assert paths.knowledge_diagnostic_json == Path(
+        "results/lesson/knowledge_items_diagnostic.json"
+    )

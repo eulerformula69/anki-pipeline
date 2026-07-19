@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from src.pipeline import validate_input
+from src.pipeline import run_pipeline, validate_input
 
 
 def test_missing_input_file_raises_clear_error(tmp_path) -> None:
@@ -31,3 +31,68 @@ def test_pipeline_supports_direct_script_invocation() -> None:
 
     assert result.returncode == 0
     assert "--device" in result.stdout
+
+
+def test_extract_knowledge_does_not_run_expensive_stages(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    video = Path("input/video.webm")
+    video.parent.mkdir()
+    video.touch()
+    result_dir = Path("output/video")
+    result_dir.mkdir(parents=True)
+    (result_dir / "transcript.json").write_text("{}", encoding="utf-8")
+    (result_dir / "semantic_segments.json").write_text("{}", encoding="utf-8")
+    called = False
+
+    def fake_extract(*args, **kwargs) -> None:
+        nonlocal called
+        called = True
+
+    def forbidden(*args, **kwargs) -> None:
+        raise AssertionError("Дорогой этап не должен запускаться")
+
+    monkeypatch.setattr("src.pipeline.extract_knowledge", fake_extract)
+    monkeypatch.setattr("src.pipeline.ensure_ffmpeg", forbidden)
+    monkeypatch.setattr("src.pipeline.transcribe_audio", forbidden)
+
+    result = run_pipeline(video, extract_knowledge_items=True)
+
+    assert called
+    assert result == result_dir / "knowledge_items.json"
+
+
+def test_existing_knowledge_is_reused(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    video = Path("input/video.webm")
+    video.parent.mkdir()
+    video.touch()
+    destination = Path("output/video/knowledge_items.json")
+    destination.parent.mkdir(parents=True)
+    destination.write_text('{"valid": true}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        "src.pipeline.extract_knowledge",
+        lambda *args, **kwargs: pytest.fail("Ollama не должен запускаться"),
+    )
+
+    assert run_pipeline(video, extract_knowledge_items=True) == destination
+
+
+def test_extract_knowledge_does_not_require_original_video(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    video = Path("input/deleted-video.webm")
+    result_dir = Path("output/deleted-video")
+    result_dir.mkdir(parents=True)
+    (result_dir / "transcript.json").write_text("{}", encoding="utf-8")
+    (result_dir / "semantic_segments.json").write_text("{}", encoding="utf-8")
+    called = False
+
+    def fake_extract(*args, **kwargs) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("src.pipeline.extract_knowledge", fake_extract)
+
+    run_pipeline(video, extract_knowledge_items=True)
+
+    assert called
