@@ -10,6 +10,8 @@ class ResultPaths:
     audio: Path
     transcript_json: Path
     transcript_txt: Path
+    semantic_segments_json: Path
+    semantic_diagnostic_json: Path
 
 
 def build_result_paths(video: Path, output_root: Path = Path("output")) -> ResultPaths:
@@ -19,5 +21,6 @@ def build_result_paths(video: Path, output_root: Path = Path("output")) -> Resul
         audio=directory / "audio.wav",
         transcript_json=directory / "transcript.json",
         transcript_txt=directory / "transcript.txt",
+        semantic_segments_json=directory / "semantic_segments.json",
+        semantic_diagnostic_json=directory / "semantic_segments_diagnostic.json",
     )
-

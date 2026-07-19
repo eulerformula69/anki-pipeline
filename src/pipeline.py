@@ -9,12 +9,16 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from src.output import save_transcript_json, save_transcript_text
+    from src.ollama_client import OllamaClient, OllamaError
     from src.paths import build_result_paths
+    from src.semantic import SemanticSegmentationError, semantic_segment_transcript
     from src.transcription import TranscriptionError, resolve_device, transcribe_audio
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from .output import save_transcript_json, save_transcript_text
+    from .ollama_client import OllamaClient, OllamaError
     from .paths import build_result_paths
+    from .semantic import SemanticSegmentationError, semantic_segment_transcript
     from .transcription import TranscriptionError, resolve_device, transcribe_audio
 
 LOGGER = logging.getLogger("anki_pipeline")
@@ -34,32 +38,62 @@ def run_pipeline(
     device: str = "auto",
     language: str | None = None,
     force: bool = False,
+    semantic_segment: bool = False,
+    ollama_model: str = "qwen3:8b",
+    ollama_url: str = "http://localhost:11434",
+    ollama_timeout: float = 120.0,
 ) -> Path:
     validate_input(video)
-    ensure_ffmpeg()
     paths = build_result_paths(video)
 
     if paths.transcript_json.exists() and paths.transcript_txt.exists() and not force:
         LOGGER.info("Транскрипция уже существует: %s", paths.transcript_json)
-        return paths.transcript_json
-
-    if paths.audio.exists() and not force:
-        LOGGER.info("Используется существующее аудио: %s", paths.audio)
     else:
-        LOGGER.info("Извлечение mono-аудио 16 kHz: %s", paths.audio)
-        extract_audio(video, paths.audio, force=force)
+        ensure_ffmpeg()
+        if paths.audio.exists() and not force:
+            LOGGER.info("Используется существующее аудио: %s", paths.audio)
+        else:
+            LOGGER.info("Извлечение mono-аудио 16 kHz: %s", paths.audio)
+            extract_audio(video, paths.audio, force=force)
 
-    selected_device, compute_type = resolve_device(device)
-    LOGGER.info("Транскрибация: model=%s device=%s compute=%s", model, selected_device, compute_type)
-    transcript = transcribe_audio(
-        paths.audio,
-        video,
-        model_name=model,
-        device=device,
-        language=language,
-    )
-    save_transcript_json(transcript, paths.transcript_json)
-    save_transcript_text(transcript, paths.transcript_txt)
+        selected_device, compute_type = resolve_device(device)
+        LOGGER.info(
+            "Транскрибация: model=%s device=%s compute=%s",
+            model,
+            selected_device,
+            compute_type,
+        )
+        transcript = transcribe_audio(
+            paths.audio,
+            video,
+            model_name=model,
+            device=device,
+            language=language,
+        )
+        save_transcript_json(transcript, paths.transcript_json)
+        save_transcript_text(transcript, paths.transcript_txt)
+
+    if semantic_segment:
+        if paths.semantic_segments_json.exists() and not force:
+            LOGGER.info(
+                "Смысловая сегментация уже существует: %s",
+                paths.semantic_segments_json,
+            )
+        else:
+            LOGGER.info("Смысловая сегментация через Ollama: model=%s", ollama_model)
+            client = OllamaClient(
+                model=ollama_model,
+                base_url=ollama_url,
+                timeout=ollama_timeout,
+            )
+            semantic_segment_transcript(
+                paths.transcript_json,
+                paths.semantic_segments_json,
+                paths.semantic_diagnostic_json,
+                client,
+            )
+            LOGGER.info("Смысловые блоки: %s", paths.semantic_segments_json)
+
     LOGGER.info("Готово: %s", paths.directory)
     return paths.transcript_json
 
@@ -73,6 +107,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--language", help="Код языка, например ru; по умолчанию авто")
     parser.add_argument("--force", action="store_true", help="Перезаписать результаты")
+    parser.add_argument(
+        "--semantic-segment",
+        action="store_true",
+        help="Создать смысловые блоки через локальный Ollama",
+    )
+    parser.add_argument(
+        "--ollama-model", default="qwen3:8b", help="Модель Ollama (default: qwen3:8b)"
+    )
+    parser.add_argument(
+        "--ollama-url",
+        default="http://localhost:11434",
+        help="URL локального API Ollama",
+    )
+    parser.add_argument(
+        "--ollama-timeout",
+        type=float,
+        default=120.0,
+        help="Таймаут одного запроса к Ollama в секундах",
+    )
     return parser
 
 
@@ -88,8 +141,19 @@ def main(argv: list[str] | None = None) -> int:
             device=args.device,
             language=args.language,
             force=args.force,
+            semantic_segment=args.semantic_segment,
+            ollama_model=args.ollama_model,
+            ollama_url=args.ollama_url,
+            ollama_timeout=args.ollama_timeout,
         )
-    except (FileNotFoundError, ValueError, AudioExtractionError, TranscriptionError) as exc:
+    except (
+        FileNotFoundError,
+        ValueError,
+        AudioExtractionError,
+        TranscriptionError,
+        OllamaError,
+        SemanticSegmentationError,
+    ) as exc:
         LOGGER.error("%s", exc)
         return 1
     return 0
