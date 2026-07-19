@@ -1,12 +1,47 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterable
 
 from .models import Transcript, TranscriptSegment
 
 
 class TranscriptionError(RuntimeError):
     pass
+
+
+def collect_segments(
+    raw_segments: Iterable[object], duration: float
+) -> list[TranscriptSegment]:
+    try:
+        from tqdm import tqdm
+    except ImportError as exc:
+        raise TranscriptionError(
+            "tqdm не установлен. Выполните: pip install -r requirements.txt"
+        ) from exc
+
+    segments: list[TranscriptSegment] = []
+    with tqdm(
+        total=duration,
+        desc="Транскрибация",
+        unit="сек",
+        dynamic_ncols=True,
+    ) as progress:
+        for index, segment in enumerate(raw_segments):
+            segments.append(
+                TranscriptSegment(
+                    id=index,
+                    start=round(segment.start, 3),
+                    end=round(segment.end, 3),
+                    text=segment.text.strip(),
+                )
+            )
+            processed = min(float(segment.end), duration)
+            progress.update(max(0.0, processed - progress.n))
+
+        progress.update(max(0.0, duration - progress.n))
+
+    return segments
 
 
 def resolve_device(requested: str) -> tuple[str, str]:
@@ -47,15 +82,7 @@ def transcribe_audio(
             model_name, device=selected_device, compute_type=compute_type
         )
         raw_segments, info = model.transcribe(str(audio), language=language)
-        segments = [
-            TranscriptSegment(
-                id=index,
-                start=round(segment.start, 3),
-                end=round(segment.end, 3),
-                text=segment.text.strip(),
-            )
-            for index, segment in enumerate(raw_segments)
-        ]
+        segments = collect_segments(raw_segments, float(info.duration))
     except Exception as exc:
         hint = (
             " Попробуйте --device cpu, если CUDA настроена неправильно."
@@ -71,4 +98,3 @@ def transcribe_audio(
         model=model_name,
         segments=segments,
     )
-
