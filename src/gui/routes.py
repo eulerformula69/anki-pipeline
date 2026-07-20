@@ -129,10 +129,11 @@ async def create_job(
         selected = list(stages or [])
         if not selected:
             raise ValueError("Выберите хотя бы одну стадию.")
-        paths = build_result_paths(prepared.video_path)
+        video_path = Path(prepared.video_path)
+        paths = build_result_paths(video_path)
         plan = compute_plan(selected, paths.directory)
         job = request.app.state.jobs.submit(PipelineRunRequest(
-            video_path=prepared.video_path, source=prepared.source, stages=plan,
+            video_path=video_path, source=prepared.title, stages=plan,
             model=model, device=device, language=language or None, force=force,
             ollama_model=ollama_model, ollama_url=ollama_url, ollama_timeout=ollama_timeout,
             target_language=target_language, frames_per_card=frames_per_card, image_policy=image_policy,
