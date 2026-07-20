@@ -202,7 +202,7 @@ def test_expression_is_linked_and_native_form_is_added() -> None:
     assert "だって [だって] (datte)" in result.extra
 
 
-def test_native_sentence_is_prefixed_when_romaji_is_misrecognized() -> None:
+def test_native_sentence_is_not_prefixed_when_romaji_is_misrecognized() -> None:
     items = knowledge_items()[:1]
     proposal = CardProposal(
         ["k_0001"], "basic", "What does ashto wa hereta mean?", "Tomorrow is sunny.", "", 2
@@ -217,7 +217,8 @@ def test_native_sentence_is_prefixed_when_romaji_is_misrecognized() -> None:
         proposal, {items[0].id: items[0]}, {"k_0001": [expression]}
     )
 
-    assert result.front.startswith("明日は晴れだって — ")
+    assert result.front == "What does ashto wa hereta mean?"
+    assert result.expression_ids == []
 
 
 def test_verified_term_is_replaced_globally() -> None:
@@ -237,6 +238,24 @@ def test_verified_term_is_replaced_globally() -> None:
     assert result.front == "How does だって work?"
     assert result.back == "だって marks a quotation."
     assert result.expression_ids == []
+
+
+def test_suffix_spelling_variant_is_replaced_without_example_prefix() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(
+        ["k_0001"], "basic", "What does -rashi express?", "Rashi marks resemblance.", "", 2
+    )
+    suffix = TargetExpression(
+        "e_suffix", "ja", "〜らしい", "らしい", "~- rashii", "resemblance",
+        ["k_0001"], [1], "transcribed", 0.9, "grammar_pattern",
+    )
+
+    result = proposal_to_candidate(
+        proposal, {items[0].id: items[0]}, {"k_0001": [suffix]}, [suffix]
+    )
+
+    assert result.front == "What does 〜らしい express?"
+    assert result.back == "〜らしい marks resemblance."
 
 
 def test_existing_card_is_relinked_to_expression_by_source_segment(tmp_path: Path) -> None:
@@ -262,8 +281,39 @@ def test_existing_card_is_relinked_to_expression_by_source_segment(tmp_path: Pat
     localize_existing_candidates(cards_path, expressions_path)
 
     saved = json.loads(cards_path.read_text(encoding="utf-8"))["card_candidates"][0]
-    assert saved["front"].startswith("らしい — ")
+    assert saved["front"] == "What does it mean?"
+    assert "らしい [らしい] (rashii)" in saved["extra"]
     assert saved["expression_ids"] == ["e_0001"]
+
+
+def test_stale_example_link_and_extra_are_removed(tmp_path: Path) -> None:
+    candidate = CardCandidate(
+        "c_0001", ["k_0001"], "basic", "What does rashi mean?", "Resemblance.",
+        "Context.\nTarget expressions: 明日は晴れだって (ashita wa hare datte)",
+        2, 4, ["basic"], [7], ["e_example"],
+    )
+    cards_path = tmp_path / "cards.json"
+    cards_path.write_text(json.dumps({
+        "source": "video", "model": "qwen3:8b",
+        "card_candidates": [candidate.__dict__],
+    }), encoding="utf-8")
+    expression = TargetExpression(
+        "e_example", "ja", "明日は晴れだって", "あしたははれだって",
+        "ashita wa hare datte", "Tomorrow will be sunny.",
+        ["k_0001"], [7], "verified", 0.9, "example_sentence",
+    )
+    expressions_path = tmp_path / "expressions.json"
+    expressions_path.write_text(json.dumps({
+        "source": "video", "model": "qwen3:8b", "target_language": "ja",
+        "expressions": [expression.__dict__],
+    }), encoding="utf-8")
+
+    localize_existing_candidates(cards_path, expressions_path)
+
+    saved = json.loads(cards_path.read_text(encoding="utf-8"))["card_candidates"][0]
+    assert saved["front"] == "What does rashi mean?"
+    assert saved["extra"] == "Context."
+    assert saved["expression_ids"] == []
 
 
 def test_plain_text_cloze_underscores_are_allowed() -> None:

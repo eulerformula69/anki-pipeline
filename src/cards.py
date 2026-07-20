@@ -18,6 +18,7 @@ from .models import (
 from .card_enrichment import (
     CardProposal,
     deduplicate_candidates,
+    expression_is_relevant_to_text,
     fallback_card_proposals,
     normalize_front,
     number_candidates,
@@ -461,8 +462,13 @@ def localize_existing_candidates(cards_path: Path, expressions_path: Path) -> in
         linked_by_id = {
             item.id: item
             for item in verified
-            if item.id in (candidate.expression_ids or [])
-            or bool(source_ids & set(item.source_transcript_segment_ids))
+            if (
+                item.id in (candidate.expression_ids or [])
+                or bool(source_ids & set(item.source_transcript_segment_ids))
+            )
+            and expression_is_relevant_to_text(
+                item, " ".join((candidate.front, candidate.back))
+            )
         }
         linked = list(linked_by_id.values())
         front, back, extra = localize_card_text(

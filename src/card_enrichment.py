@@ -83,28 +83,46 @@ def localize_card_text(
     front: str, back: str, extra: str, expressions: list,
     replacement_expressions: list,
 ) -> tuple[str, str, str]:
+    extra = re.sub(
+        r"(?:^|\n)Target expressions:.*?(?=\n|$)",
+        "",
+        extra,
+    ).strip()
+    for expression in replacement_expressions:
+        prefix = f"{expression.surface} — "
+        if front.startswith(prefix):
+            front = front[len(prefix):]
     for expression in sorted(
         replacement_expressions, key=lambda item: len(item.romanization), reverse=True
     ):
-        if expression.romanization:
-            pattern = re.compile(re.escape(expression.romanization), re.IGNORECASE)
+        if expression.romanization and expression.type != "example_sentence":
+            romanization = expression.romanization.strip(" ~〜～-")
+            escaped = re.escape(romanization)
+            if romanization.casefold().endswith("ii"):
+                escaped = re.escape(romanization[:-1]) + "i?"
+            pattern = re.compile(
+                rf"(?<![A-Za-z])[-~〜～]?\s*{escaped}(?![A-Za-z])",
+                re.IGNORECASE,
+            )
             front = pattern.sub(expression.surface, front)
             back = pattern.sub(expression.surface, back)
-    if expressions and not any(item.surface in front for item in expressions):
-        primary = max(
-            expressions,
-            key=lambda item: (item.type == "example_sentence", len(item.surface)),
-        )
-        front = f"{primary.surface} — {front}"
-        if len(front) > 120:
-            front = front[:119].rstrip() + "…"
-    if expressions and "Target expressions:" not in extra:
+    if expressions:
         labels = [
             f"{item.surface} [{item.reading}] ({item.romanization})"
             for item in expressions
         ]
         extra = f"{extra}\nTarget expressions: {'; '.join(labels)}".strip()
     return front, back, extra
+
+
+def expression_is_relevant_to_text(expression: object, text: str) -> bool:
+    if getattr(expression, "type", "") != "example_sentence":
+        return True
+    romanization = " ".join(
+        re.findall(r"[a-z]+", getattr(expression, "romanization", "").casefold())
+    )
+    normalized_text = " ".join(re.findall(r"[a-z]+", text.casefold()))
+    return bool(romanization) and romanization in normalized_text
 
 
 def proposal_to_candidate(
@@ -125,6 +143,10 @@ def proposal_to_candidate(
             for knowledge_id in proposal.knowledge_ids
             for expression in expressions_by_knowledge.get(knowledge_id, [])
         }.values())
+    card_text = " ".join((proposal.front, proposal.back))
+    expressions = [
+        item for item in expressions if expression_is_relevant_to_text(item, card_text)
+    ]
     replacements = replacement_expressions if replacement_expressions is not None else expressions
     front, back, extra = localize_card_text(
         proposal.front, proposal.back, proposal.extra, expressions, replacements
