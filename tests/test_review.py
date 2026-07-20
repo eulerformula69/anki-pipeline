@@ -53,7 +53,7 @@ def test_keep_discard_merge_and_split_are_valid() -> None:
     [
         ("status", "unknown", "status"),
         ("issues", ["invented"], "issues"),
-        ("confidence", 1.1, "confidence"),
+        ("confidence", 5.1, "confidence"),
         ("recommended_action", "invented", "recommended_action"),
     ],
 )
@@ -69,6 +69,14 @@ def test_duplicate_or_missing_review_id_is_invalid() -> None:
 
     with pytest.raises(KnowledgeReviewError, match="покрытие"):
         parse_review_response(data, ["k1", "k2"])
+
+
+def test_five_point_confidence_is_normalized() -> None:
+    data = {"reviews": [review_item("k1", confidence=5)]}
+
+    result = parse_review_response(data, ["k1"])
+
+    assert result[0].confidence == 1.0
 
 
 def test_items_are_grouped_globally_for_cross_segment_deduplication() -> None:

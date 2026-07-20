@@ -53,6 +53,16 @@ class KnowledgeReviewError(RuntimeError):
     pass
 
 
+def normalize_review_confidence(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if 0 <= value <= 1:
+        return float(value)
+    if isinstance(value, int) and 2 <= value <= 5:
+        return value / 5
+    return None
+
+
 def normalize_review_relations(
     reviews: list[KnowledgeReview],
 ) -> list[KnowledgeReview]:
@@ -203,7 +213,7 @@ def parse_review_response(
             errors.append(prefix + "набор полей не соответствует схеме.")
         knowledge_id = raw.get("knowledge_id")
         status = raw.get("status")
-        confidence = raw.get("confidence")
+        confidence = normalize_review_confidence(raw.get("confidence"))
         issues = raw.get("issues")
         action = raw.get("recommended_action")
         reason = raw.get("reason")
@@ -211,12 +221,11 @@ def parse_review_response(
             errors.append(prefix + "knowledge_id должен быть строкой.")
         if status not in ALLOWED_REVIEW_STATUSES:
             errors.append(prefix + f"неизвестный status {status!r}.")
-        if (
-            not isinstance(confidence, (int, float))
-            or isinstance(confidence, bool)
-            or not 0 <= confidence <= 1
-        ):
-            errors.append(prefix + "confidence должен быть числом от 0 до 1.")
+        if confidence is None:
+            errors.append(
+                prefix
+                + "confidence должен быть числом от 0 до 1 или целым числом от 1 до 5."
+            )
         if not isinstance(issues, list):
             errors.append(prefix + "issues содержит неизвестные значения.")
         elif any(
