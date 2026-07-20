@@ -2,10 +2,11 @@ import json
 
 import pytest
 
-from src.models import KnowledgeItem
+from src.models import KnowledgeItem, KnowledgeReview
 from src.review import (
     KnowledgeReviewError,
     group_knowledge_items,
+    normalize_review_relations,
     parse_review_response,
     review_knowledge,
 )
@@ -76,6 +77,19 @@ def test_items_are_grouped_globally_for_cross_segment_deduplication() -> None:
     assert [[item.id for item in group] for group in groups] == [
         ["k_0001", "k_0002", "k_0003"],
     ]
+
+
+def test_merge_into_discarded_duplicate_becomes_keep() -> None:
+    reviews = [
+        KnowledgeReview("k_0001", "merge", 0.9, ["duplicate"], "merge", "Merge with k_0002"),
+        KnowledgeReview("k_0002", "discard", 0.9, ["redundant"], "discard", "Duplicate of k_0001"),
+    ]
+
+    result = normalize_review_relations(reviews)
+
+    assert result[0].status == "keep"
+    assert result[0].recommended_action == "none"
+    assert result[1].status == "discard"
 
 
 class SequenceClient:

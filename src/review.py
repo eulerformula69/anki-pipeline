@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -49,6 +51,39 @@ REVIEW_RESPONSE_SCHEMA = review_response_schema(
 
 class KnowledgeReviewError(RuntimeError):
     pass
+
+
+def normalize_review_relations(
+    reviews: list[KnowledgeReview],
+) -> list[KnowledgeReview]:
+    by_id = {review.knowledge_id: review for review in reviews}
+    normalized: list[KnowledgeReview] = []
+    for review in reviews:
+        if review.status != "merge":
+            normalized.append(review)
+            continue
+        targets = [
+            item_id
+            for item_id in re.findall(r"k_\d{4}", review.reason)
+            if item_id != review.knowledge_id and item_id in by_id
+        ]
+        if targets and all(by_id[item_id].status == "discard" for item_id in targets):
+            normalized.append(replace(
+                review,
+                status="keep",
+                recommended_action="none",
+                issues=[
+                    issue for issue in review.issues
+                    if issue not in {"duplicate", "redundant"}
+                ],
+                reason=(
+                    "Основное знание сохранено; дубли "
+                    f"{', '.join(targets)} отброшены."
+                ),
+            ))
+        else:
+            normalized.append(review)
+    return normalized
 
 
 def load_knowledge_items(path: Path) -> tuple[str, str, list[KnowledgeItem]]:
@@ -211,7 +246,7 @@ def parse_review_response(
         )
     if errors:
         raise KnowledgeReviewError(" | ".join(errors))
-    return reviews
+    return normalize_review_relations(reviews)
 
 
 def save_review_diagnostic(

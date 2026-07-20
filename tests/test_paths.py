@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.paths import build_result_paths
+from src.paths import build_result_paths, source_identity
 
 
 def test_build_result_paths() -> None:
@@ -24,3 +24,18 @@ def test_build_result_paths() -> None:
     assert paths.anki_export_manifest_json == Path(
         "results/lesson/anki_export_manifest.json"
     )
+
+
+def test_youtube_manifest_gives_unique_project_and_source_identity(tmp_path) -> None:
+    video = tmp_path / "input" / "downloads" / "Youtube" / "abc123" / "video.mkv"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"video")
+    (video.parent / "source_manifest.json").write_text(
+        '{"source_id":"abc123","kind":"youtube"}', encoding="utf-8"
+    )
+
+    paths = build_result_paths(video, tmp_path / "output")
+
+    assert paths.directory == tmp_path / "output" / "abc123"
+    assert paths.anki_deck.name == "abc123.apkg"
+    assert source_identity(video) == "youtube:abc123"

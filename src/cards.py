@@ -26,7 +26,11 @@ from .card_enrichment import (
 from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
 from .ollama_schemas import card_response_schema
 from .progress import ActivityIndicator
-from .review import KnowledgeReviewError, load_knowledge_items
+from .review import (
+    KnowledgeReviewError,
+    load_knowledge_items,
+    normalize_review_relations,
+)
 from .semantic import save_json_atomic
 from .target_expressions import load_target_expressions
 
@@ -89,7 +93,7 @@ def load_knowledge_reviews(path: Path) -> tuple[str, str, list[KnowledgeReview]]
         model = str(data["model"])
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         raise CardGenerationError(f"Не удалось прочитать knowledge_review.json: {exc}") from exc
-    return source, model, reviews
+    return source, model, normalize_review_relations(reviews)
 
 
 def validate_review_coverage(

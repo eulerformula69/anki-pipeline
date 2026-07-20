@@ -20,7 +20,12 @@ from ..paths import build_result_paths
 from ..source_ingest import SourceIngestError, prepare_source
 from .review_store import ReviewError, normalize_uploaded_image
 from .schemas import PipelineRunRequest, STAGES, STAGE_LABELS
-from .services import compute_plan, export_approved_deck, generate_image_candidates
+from .services import (
+    compute_plan,
+    export_approved_deck,
+    generate_image_candidates,
+    migrate_legacy_project,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -173,6 +178,7 @@ async def create_job(
         if not selected:
             raise ValueError("Выберите хотя бы одну стадию.")
         video_path = Path(prepared.video_path)
+        migrate_legacy_project(video_path, request.app.state.root / "output")
         paths = build_result_paths(video_path)
         plan = compute_plan(selected, paths.directory)
         job = request.app.state.jobs.submit(PipelineRunRequest(

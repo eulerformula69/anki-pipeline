@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .models import Transcript, TranscriptSegment
+from .paths import source_identity
 
 
 class TranscriptionError(RuntimeError):
@@ -92,7 +93,7 @@ def transcribe_audio(
         raise TranscriptionError(f"Ошибка транскрибации: {exc}.{hint}") from exc
 
     return Transcript(
-        source=source.name,
+        source=source_identity(source),
         language=info.language,
         duration_seconds=round(float(info.duration), 3),
         model=model_name,

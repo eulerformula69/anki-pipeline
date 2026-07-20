@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
@@ -8,7 +9,7 @@ from typing import Callable
 from ..anki_export import build_anki_deck
 from ..frame_extraction import calculate_frame_metrics, calculate_quality_score, choose_frame_timestamps, extract_frame
 from ..semantic import save_json_atomic
-from ..paths import build_result_paths
+from ..paths import build_result_paths, source_identity
 from ..pipeline import run_pipeline
 from .schemas import PipelineRunRequest, STAGES
 
@@ -28,6 +29,40 @@ DEPENDENCIES = {
     "card_generation": ("knowledge_extraction", "knowledge_review"),
     "frame_extraction": ("transcription", "card_generation"),
 }
+
+
+def migrate_legacy_project(video: Path, output_root: Path) -> Path:
+    destination = build_result_paths(video, output_root).directory
+    legacy = output_root / video.stem
+    if destination == legacy or destination.exists() or not legacy.is_dir():
+        return destination
+    state_path = legacy / "gui_job.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        recorded_video = Path(state["video_path"]).resolve()
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return destination
+    if recorded_video != video.resolve():
+        return destination
+    shutil.copytree(legacy, destination)
+    identity = source_identity(video)
+    for path in destination.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        changed = False
+        if "source" in data:
+            data["source"] = identity
+            changed = True
+        if path.name == "gui_job.json":
+            data["output_directory"] = str(destination.resolve())
+            changed = True
+        if changed:
+            save_json_atomic(data, path)
+    return destination
 
 
 def compute_plan(selected: list[str], output: Path) -> list[str]:

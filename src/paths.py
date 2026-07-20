@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
+import re
 
 
 @dataclass(frozen=True)
@@ -33,8 +35,34 @@ class ResultPaths:
     media_candidates_directory: Path
 
 
+def source_manifest(video: Path) -> dict[str, object] | None:
+    path = video.parent / "source_manifest.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def project_key(video: Path) -> str:
+    manifest = source_manifest(video)
+    source_id = manifest and manifest.get("source_id")
+    if isinstance(source_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{3,80}", source_id):
+        return source_id
+    return video.stem
+
+
+def source_identity(video: Path) -> str:
+    manifest = source_manifest(video)
+    source_id = manifest and manifest.get("source_id")
+    if isinstance(source_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{3,80}", source_id):
+        return f"youtube:{source_id}"
+    return video.name
+
+
 def build_result_paths(video: Path, output_root: Path = Path("output")) -> ResultPaths:
-    directory = output_root / video.stem
+    key = project_key(video)
+    directory = output_root / key
     return ResultPaths(
         directory=directory,
         audio=directory / "audio.wav",
@@ -54,7 +82,7 @@ def build_result_paths(video: Path, output_root: Path = Path("output")) -> Resul
         target_audio_directory=directory / "target_audio",
         card_media_json=directory / "card_media.json",
         media_directory=directory / "media",
-        anki_deck=directory / f"{video.stem}.apkg",
+        anki_deck=directory / f"{key}.apkg",
         anki_export_manifest_json=directory / "anki_export_manifest.json",
         approved_cards_json=directory / "approved_cards.json",
         gui_job_json=directory / "gui_job.json",

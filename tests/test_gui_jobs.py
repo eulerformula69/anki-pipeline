@@ -4,7 +4,7 @@ from pathlib import Path
 
 from src.gui.jobs import JobManager
 from src.gui.schemas import JobState, PipelineRunRequest
-from src.gui.services import PipelineRunner, compute_plan
+from src.gui.services import PipelineRunner, compute_plan, migrate_legacy_project
 
 
 def test_plan_adds_missing_dependencies(tmp_path):
@@ -56,3 +56,27 @@ def test_target_transcription_refreshes_expressions_with_native_evidence(tmp_pat
     assert calls[0]["transcribe_target_stage"] is True
     assert calls[1]["extract_expressions"] is True
     assert calls[1]["force"] is True
+
+
+def test_legacy_youtube_output_is_copied_to_unique_project(tmp_path):
+    video = tmp_path / "input" / "downloads" / "Youtube" / "abc123" / "video.mkv"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"video")
+    (video.parent / "source_manifest.json").write_text(
+        '{"source_id":"abc123"}', encoding="utf-8"
+    )
+    legacy = tmp_path / "output" / "video"
+    legacy.mkdir(parents=True)
+    (legacy / "gui_job.json").write_text(json.dumps({
+        "video_path": str(video.resolve()), "output_directory": str(legacy.resolve()),
+    }), encoding="utf-8")
+    (legacy / "transcript.json").write_text(
+        '{"source":"video.mkv","segments":[]}', encoding="utf-8"
+    )
+
+    destination = migrate_legacy_project(video, tmp_path / "output")
+
+    assert destination == tmp_path / "output" / "abc123"
+    migrated = json.loads((destination / "transcript.json").read_text(encoding="utf-8"))
+    assert migrated["source"] == "youtube:abc123"
+    assert json.loads((legacy / "transcript.json").read_text(encoding="utf-8"))["source"] == "video.mkv"

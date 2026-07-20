@@ -149,6 +149,26 @@ def test_semantically_redundant_cards_are_deduplicated() -> None:
     assert len(deduplicate_candidates([first, second])) == 1
 
 
+def test_merge_source_with_discarded_duplicate_can_generate_one_card() -> None:
+    items = [
+        KnowledgeItem("k_0013", 0, "fact", "Keep this.", "", 4, [1], "Keep"),
+        KnowledgeItem("k_0014", 0, "fact", "Duplicate.", "", 3, [2], "Duplicate"),
+    ]
+    reviews = [
+        KnowledgeReview("k_0013", "keep", 0.9, [], "none", "Primary"),
+        KnowledgeReview("k_0014", "discard", 0.9, ["redundant"], "discard", "Duplicate"),
+    ]
+    data = {"card_candidates": [{
+        "knowledge_ids": ["k_0013"], "card_type": "basic",
+        "front": "What should be kept?", "back": "Keep this.",
+        "extra": "", "difficulty": 3,
+    }]}
+
+    result = parse_card_response(data, items, reviews)
+
+    assert result[0].knowledge_ids == ["k_0013"]
+
+
 def test_proposal_builds_automatic_fields() -> None:
     items = knowledge_items()[:2]
     proposal = CardProposal(
