@@ -63,6 +63,15 @@ def test_assemble_text_and_timestamps_from_original_segments() -> None:
     assert result.segments[0].text == "First sentence. Second sentence."
 
 
+def test_assemble_preserves_target_language_text() -> None:
+    result = assemble_result(
+        "video.webm", "gemini", transcript_segments(),
+        [ProposedBlock("Topic", "Summary", [0, 1, 2])],
+        {1: ["明日は晴れだって"]},
+    )
+    assert result.segments[0].target_language_text == "明日は晴れだって"
+
+
 def test_windows_keep_overlap_outside_core() -> None:
     windows = build_windows(transcript_segments(), max_chars=50, overlap=1)
 

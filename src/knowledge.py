@@ -186,6 +186,7 @@ importance — целое число 1–5 относительно этого �
 Title: {semantic.title}
 Summary: {semantic.summary}
 Text: {semantic.text}
+Target-language text: {semantic.target_language_text}
 Исходные фрагменты:
 {fragments}"""
 

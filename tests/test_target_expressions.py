@@ -41,6 +41,14 @@ def test_parse_expression_keeps_native_writing_and_links() -> None:
     assert result[0].knowledge_ids == ["k_0001"]
 
 
+def test_early_expression_does_not_require_knowledge_items() -> None:
+    result = parse_response(
+        valid_response(), [], "ja", allowed_source_ids={3, 4}
+    )
+    assert result[0].knowledge_ids == []
+    assert result[0].source_transcript_segment_ids == [3, 4]
+
+
 def test_unknown_source_id_is_rejected() -> None:
     data = valid_response()
     data["expressions"][0]["source_transcript_segment_ids"] = [99]

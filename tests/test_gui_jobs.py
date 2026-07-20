@@ -4,12 +4,15 @@ from pathlib import Path
 
 from src.gui.jobs import JobManager
 from src.gui.schemas import JobState, PipelineRunRequest
-from src.gui.services import PipelineRunner, compute_plan, migrate_legacy_project
+from src.gui.services import (
+    PipelineRunner, artifact_is_stale, compute_plan, migrate_legacy_project,
+)
 
 
 def test_plan_adds_missing_dependencies(tmp_path):
     assert compute_plan(["frame_extraction"], tmp_path) == [
-        "transcription", "semantic_segmentation", "knowledge_extraction",
+        "transcription", "target_expressions", "target_transcription",
+        "semantic_segmentation", "knowledge_extraction",
         "knowledge_review", "card_generation", "frame_extraction",
     ]
 
@@ -18,6 +21,22 @@ def test_plan_reuses_existing_artifacts(tmp_path):
     for name in ("transcript.json", "semantic_segments.json", "knowledge_items.json", "knowledge_review.json", "card_candidates.json"):
         (tmp_path / name).write_text("{}", encoding="utf-8")
     assert compute_plan(["frame_extraction"], tmp_path) == ["frame_extraction"]
+
+
+def test_artifact_is_stale_when_language_dependency_is_newer(tmp_path):
+    semantic = tmp_path / "semantic_segments.json"
+    target = tmp_path / "target_transcript.json"
+    semantic.write_text("{}", encoding="utf-8")
+    target.write_text("{}", encoding="utf-8")
+    semantic.touch()
+    assert artifact_is_stale("semantic_segmentation", tmp_path) is False
+    target.touch()
+    target_stat = target.stat()
+    target.touch()
+    assert target.stat().st_mtime_ns >= target_stat.st_mtime_ns
+    if target.stat().st_mtime_ns == semantic.stat().st_mtime_ns:
+        target.write_text('{"new":true}', encoding="utf-8")
+    assert artifact_is_stale("semantic_segmentation", tmp_path) is True
 
 
 def test_manager_restores_saved_job_after_restart(tmp_path):

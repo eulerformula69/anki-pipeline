@@ -21,11 +21,11 @@ ARTIFACTS = {
     "card_generation": "card_candidates.json", "frame_extraction": "card_media.json",
 }
 DEPENDENCIES = {
-    "semantic_segmentation": ("transcription",),
+    "target_expressions": ("transcription",),
+    "target_transcription": ("transcription", "target_expressions"),
+    "semantic_segmentation": ("transcription", "target_transcription"),
     "knowledge_extraction": ("semantic_segmentation",),
     "knowledge_review": ("knowledge_extraction",),
-    "target_expressions": ("knowledge_extraction",),
-    "target_transcription": ("transcription", "target_expressions"),
     "card_generation": ("knowledge_extraction", "knowledge_review"),
     "frame_extraction": ("transcription", "card_generation"),
 }
@@ -81,6 +81,21 @@ def compute_plan(selected: list[str], output: Path) -> list[str]:
     return [stage for stage in STAGES if stage in needed]
 
 
+def artifact_is_stale(stage: str, output: Path) -> bool:
+    artifact_name = ARTIFACTS.get(stage)
+    if artifact_name is None:
+        return False
+    artifact = output / artifact_name
+    if not artifact.exists():
+        return False
+    artifact_time = artifact.stat().st_mtime_ns
+    return any(
+        (output / ARTIFACTS[dependency]).exists()
+        and (output / ARTIFACTS[dependency]).stat().st_mtime_ns > artifact_time
+        for dependency in DEPENDENCIES.get(stage, ())
+    )
+
+
 class PipelineRunner:
     def run(self, request: PipelineRunRequest, progress: Callable[[str, str], None]) -> Path:
         paths = build_result_paths(request.video_path)
@@ -109,14 +124,16 @@ class PipelineRunner:
                 "card_generation": {"generate_cards": True},
                 "frame_extraction": {"extract_card_images_stage": True},
             }.get(stage, {})
-            result = run_pipeline(request.video_path, **common, **flags)
+            stage_common = {
+                **common,
+                "force": request.force or artifact_is_stale(stage, paths.directory),
+            }
+            result = run_pipeline(request.video_path, **stage_common, **flags)
             if stage == "target_transcription":
-                progress("target_expressions", "started")
                 refreshed = {**common, "force": True}
                 result = run_pipeline(
                     request.video_path, **refreshed, extract_expressions=True
                 )
-                progress("target_expressions", "completed")
             progress(stage, "completed")
         return result
 

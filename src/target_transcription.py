@@ -32,15 +32,8 @@ def load_candidate_source_ids(
     try:
         data = json.loads(expressions_path.read_text(encoding="utf-8"))
         expressions = data["expressions"]
-        has_types = any("type" in expression for expression in expressions)
-        selected = [
-            expression for expression in expressions
-            if not has_types
-            or expression.get("type") == "example_sentence"
-            or expression.get("verification") in {"verified", "transcribed"}
-        ]
         result: set[int] = set()
-        for expression in selected:
+        for expression in expressions:
             romanization = str(expression.get("romanization", ""))
             for segment_id in expression["source_transcript_segment_ids"]:
                 source_id = int(segment_id)

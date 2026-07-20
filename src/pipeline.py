@@ -185,15 +185,11 @@ def run_pipeline(
         if paths.target_expressions_json.exists() and not force:
             LOGGER.info("Выражения уже существуют: %s", paths.target_expressions_json)
             return paths.target_expressions_json
-        if not paths.knowledge_items_json.exists():
-            raise TargetExpressionError(
-                "Не найден knowledge_items.json. Сначала выполните --extract-knowledge."
-            )
         LOGGER.info("Извлечение выражений языка %s: model=%s", target_language, ollama_model)
         client = llm()
         extract_target_expressions(
             paths.transcript_json,
-            paths.knowledge_items_json,
+            paths.knowledge_items_json if paths.knowledge_items_json.exists() else None,
             paths.target_expressions_json,
             paths.target_expressions_diagnostic_json,
             client,
@@ -325,6 +321,7 @@ def run_pipeline(
                 paths.semantic_segments_json,
                 paths.semantic_diagnostic_json,
                 client,
+                target_transcript_path=paths.target_transcript_json,
             )
             LOGGER.info("Смысловые блоки: %s", paths.semantic_segments_json)
 

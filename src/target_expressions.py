@@ -260,14 +260,19 @@ def load_native_evidence(path: Path | None) -> dict[int, list[str]]:
 
 
 def extract_target_expressions(
-    transcript_path: Path, knowledge_path: Path, destination: Path, diagnostic_path: Path,
+    transcript_path: Path, knowledge_path: Path | None, destination: Path, diagnostic_path: Path,
     client: StructuredLLM, *, target_language: str,
     glossary_path: Path | None = None,
     target_transcript_path: Path | None = None,
 ) -> TargetExpressionCollection:
-    source, _, items = load_knowledge_items(knowledge_path)
+    items = []
+    if knowledge_path is not None and knowledge_path.exists():
+        source, _, items = load_knowledge_items(knowledge_path)
+    else:
+        source = ""
     try:
         transcript_data = json.loads(transcript_path.read_text(encoding="utf-8"))
+        source = source or str(transcript_data["source"])
         transcript_segments = [TranscriptSegment(**item) for item in transcript_data["segments"]]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise TargetExpressionError(f"Не удалось прочитать transcript.json: {exc}") from exc

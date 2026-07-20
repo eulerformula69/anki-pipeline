@@ -33,6 +33,7 @@ class SemanticSegment:
     summary: str
     transcript_segment_ids: list[int]
     text: str
+    target_language_text: str = ""
 
 
 @dataclass(frozen=True)

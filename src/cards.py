@@ -426,7 +426,12 @@ def generate_card_candidates(
             if expression.verification not in {"verified", "transcribed"}:
                 continue
             verified_expressions.append(expression)
-            for knowledge_id in expression.knowledge_ids:
+            linked_knowledge_ids = expression.knowledge_ids or [
+                item.id for item in items
+                if set(item.source_transcript_segment_ids)
+                & set(expression.source_transcript_segment_ids)
+            ]
+            for knowledge_id in linked_knowledge_ids:
                 expressions_by_knowledge[knowledge_id].append(expression)
     candidates = [
         proposal_to_candidate(

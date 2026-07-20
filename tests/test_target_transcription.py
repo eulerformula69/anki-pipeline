@@ -51,3 +51,14 @@ def test_candidate_ids_are_loaded_without_duplicates(tmp_path) -> None:
     ]}), encoding="utf-8")
 
     assert load_candidate_source_ids(path) == {1, 2, 3}
+
+
+def test_early_unverified_expression_is_sent_to_second_pass(tmp_path) -> None:
+    path = tmp_path / "expressions.json"
+    path.write_text(json.dumps({"expressions": [{
+        "type": "grammar_pattern", "verification": "needs_review",
+        "romanization": "ashita wa hare datte",
+        "source_transcript_segment_ids": [1],
+    }]}), encoding="utf-8")
+    primary = {1: "The example is ashita wa hare datte"}
+    assert load_candidate_source_ids(path, primary) == {1}

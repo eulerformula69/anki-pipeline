@@ -5,18 +5,18 @@ from pathlib import Path
 
 
 STAGES = (
-    "transcription", "semantic_segmentation", "knowledge_extraction",
-    "target_expressions", "target_transcription", "knowledge_review",
+    "transcription", "target_expressions", "target_transcription",
+    "semantic_segmentation", "knowledge_extraction", "knowledge_review",
     "card_generation", "frame_extraction",
 )
 
 STAGE_LABELS = {
     "transcription": "Транскрипция основного аудио",
+    "target_expressions": "Выражения изучаемого языка",
+    "target_transcription": "Второй проход транскрипции",
     "semantic_segmentation": "Смысловая сегментация",
     "knowledge_extraction": "Извлечение знаний",
     "knowledge_review": "Knowledge Review",
-    "target_expressions": "Выражения изучаемого языка",
-    "target_transcription": "Второй проход транскрипции",
     "card_generation": "Кандидаты карточек",
     "frame_extraction": "Изображения для карточек",
 }
