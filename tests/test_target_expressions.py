@@ -8,8 +8,10 @@ from src.target_expressions import (
     extract_target_expressions,
     load_glossary,
     parse_response,
+    recover_partial_expressions,
     stable_expression_id,
 )
+from src.ollama_schemas import target_expression_response_schema
 
 
 def item() -> KnowledgeItem:
@@ -163,3 +165,16 @@ def test_expression_id_is_stable_and_content_specific() -> None:
 
     assert first == stable_expression_id("ja", "term", "だって。")
     assert first != stable_expression_id("ja", "example_sentence", "だって")
+
+
+def test_schema_caps_expression_count() -> None:
+    assert target_expression_response_schema()["properties"]["expressions"]["maxItems"] == 6
+
+
+def test_complete_expressions_are_recovered_from_truncated_json() -> None:
+    complete = valid_response()["expressions"][0]
+    raw = json.dumps({"expressions": [complete]}, ensure_ascii=False)[:-2] + ', {"type":'
+
+    recovered = recover_partial_expressions(raw)
+
+    assert recovered == {"expressions": [complete]}

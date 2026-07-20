@@ -57,7 +57,7 @@ The explanations may be in another language. Use that language in meaning.
 surface must use the target language's native writing system (for Japanese: kana/kanji).
 reading is the native pronunciation aid (for Japanese: kana). romanization is Latin script.
 Include an example_sentence when the speaker gives a target-language example, not only its words.
-Return at most 12 items. Prioritize complete example sentences, then grammar patterns,
+Return at most 6 items. Prioritize complete example sentences, then grammar patterns,
 then important vocabulary. Do not list every particle separately.
 Do not turn ordinary English explanation into Japanese. Return each expression once per window.
 source_transcript_segment_ids must come only from INPUT. Do not return knowledge_ids.
@@ -80,6 +80,27 @@ def load_glossary(path: Path | None) -> dict[str, dict[str, str]]:
         return {str(item["romanization"]).casefold(): item for item in entries}
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise TargetExpressionError(f"Не удалось прочитать глоссарий {path}: {exc}") from exc
+
+
+def recover_partial_expressions(raw_response: str) -> dict[str, list[dict[str, Any]]] | None:
+    match = re.search(r'"expressions"\s*:\s*\[', raw_response)
+    if match is None:
+        return None
+    decoder = json.JSONDecoder()
+    position = match.end()
+    recovered: list[dict[str, Any]] = []
+    while position < len(raw_response):
+        while position < len(raw_response) and raw_response[position] in " \r\n\t,":
+            position += 1
+        if position >= len(raw_response) or raw_response[position] != "{":
+            break
+        try:
+            value, position = decoder.raw_decode(raw_response, position)
+        except json.JSONDecodeError:
+            break
+        if isinstance(value, dict):
+            recovered.append(value)
+    return {"expressions": recovered} if recovered else None
 
 
 def parse_response(
@@ -286,6 +307,23 @@ def extract_target_expressions(
             except OllamaInvalidResponseError as exc:
                 responses.append(exc.raw_response)
                 error = str(exc)
+                partial = recover_partial_expressions(exc.raw_response)
+                if partial is not None:
+                    try:
+                        recovered = parse_response(
+                            partial, items, target_language, glossary,
+                            {segment.id for segment in window},
+                            native_evidence, primary_evidence,
+                        )
+                    except TargetExpressionError:
+                        pass
+                    else:
+                        all_expressions.extend(recovered)
+                        LOGGER.warning(
+                            "Окно %d/%d: сохранено выражений из оборванного ответа: %d.",
+                            window_number, len(windows), len(recovered),
+                        )
+                        break
             except TargetExpressionError as exc:
                 error = str(exc)
             except OllamaError:

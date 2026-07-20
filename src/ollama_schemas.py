@@ -85,6 +85,7 @@ def target_expression_response_schema() -> dict:
         "properties": {
             "expressions": {
                 "type": "array",
+                "maxItems": 6,
                 "items": {
                     "type": "object",
                     "properties": {
