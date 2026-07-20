@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import SemanticSegment, SemanticTranscript, TranscriptSegment
-from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
 from .progress import ActivityIndicator
 
 LOGGER = logging.getLogger("anki_pipeline.semantic")
@@ -209,7 +209,7 @@ def semantic_segment_transcript(
     transcript_path: Path,
     destination: Path,
     diagnostic_path: Path,
-    client: OllamaClient,
+    client: StructuredLLM,
 ) -> SemanticTranscript:
     source, transcript_segments = load_transcript(transcript_path)
     all_proposals: list[ProposedBlock] = []
@@ -225,17 +225,19 @@ def semantic_segment_transcript(
                 with ActivityIndicator(
                     f"Ollama: окно {window_number}/{len(windows)}{retry_label}"
                 ):
-                    data, raw = client.generate_json(build_prompt(window, format_error))
+                    data, raw = generate_structured(
+                        client, build_prompt(window, format_error), schema={"type": "object"}
+                    )
                 responses.append(raw)
                 proposals = parse_proposals(data, window.core_ids)
                 all_proposals.extend(proposals)
                 break
-            except OllamaInvalidResponseError as exc:
+            except LLMInvalidResponseError as exc:
                 responses.append(exc.raw_response)
                 format_error = str(exc)
             except SemanticSegmentationError as exc:
                 format_error = str(exc)
-            except OllamaError:
+            except LLMError:
                 raise
             if attempt == 1:
                 message = f"Окно {window_number}: {format_error}"

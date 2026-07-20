@@ -122,7 +122,10 @@ def index(request: Request):
         except (OSError, json.JSONDecodeError):
             pass
         projects.append({"name": directory.name, "modified": directory.stat().st_mtime, "review": review and review.get("status"), "deck": any(directory.glob("*.apkg"))})
-    return _render(request, "index.html", {"stages": STAGE_LABELS, "projects": projects})
+    return _render(request, "index.html", {
+        "stages": STAGE_LABELS, "projects": projects,
+        "gemini_key_detected": bool(os.getenv("GEMINI_API_KEY")),
+    })
 
 
 async def _save_upload(upload: UploadFile, root: Path) -> Path:
@@ -162,6 +165,8 @@ async def create_job(
     language: Annotated[str, Form()] = "", target_language: Annotated[str, Form()] = "ja",
     ollama_model: Annotated[str, Form()] = "qwen3:8b", ollama_url: Annotated[str, Form()] = "http://localhost:11434",
     ollama_timeout: Annotated[float, Form()] = 120.0, frames_per_card: Annotated[int, Form()] = 5,
+    llm_provider: Annotated[str, Form()] = "ollama",
+    gemini_model: Annotated[str, Form()] = "gemini-3.1-flash-lite",
     image_policy: Annotated[str, Form()] = "auto", force: Annotated[bool, Form()] = False,
 ):
     _check_csrf(request, csrf)
@@ -185,6 +190,7 @@ async def create_job(
             video_path=video_path, source=prepared.title, stages=plan,
             model=model, device=device, language=language or None, force=force,
             ollama_model=ollama_model, ollama_url=ollama_url, ollama_timeout=ollama_timeout,
+            llm_provider=llm_provider, gemini_model=gemini_model,
             target_language=target_language, frames_per_card=frames_per_card, image_policy=image_policy,
         ))
     except (ValueError, SourceIngestError) as exc:

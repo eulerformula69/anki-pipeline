@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -13,7 +14,9 @@ if __package__ in (None, ""):
     from src.frame_extraction import FrameExtractionError, extract_card_images
     from src.knowledge import KnowledgeExtractionError, extract_knowledge
     from src.output import save_transcript_json, save_transcript_text
-    from src.ollama_client import OllamaClient, OllamaError
+    from src.config import LLMConfig
+    from src.llm import LLMError
+    from src.llm_factory import create_llm_provider
     from src.paths import build_result_paths
     from src.review import KnowledgeReviewError, review_knowledge
     from src.semantic import SemanticSegmentationError, semantic_segment_transcript
@@ -27,7 +30,9 @@ else:
     from .frame_extraction import FrameExtractionError, extract_card_images
     from .knowledge import KnowledgeExtractionError, extract_knowledge
     from .output import save_transcript_json, save_transcript_text
-    from .ollama_client import OllamaClient, OllamaError
+    from .config import LLMConfig
+    from .llm import LLMError
+    from .llm_factory import create_llm_provider
     from .paths import build_result_paths
     from .review import KnowledgeReviewError, review_knowledge
     from .semantic import SemanticSegmentationError, semantic_segment_transcript
@@ -56,6 +61,11 @@ def run_pipeline(
     ollama_model: str = "qwen3:8b",
     ollama_url: str = "http://localhost:11434",
     ollama_timeout: float = 120.0,
+    llm_provider: str | None = None,
+    gemini_model: str | None = None,
+    gemini_timeout: float | None = None,
+    gemini_max_retries: int | None = None,
+    gemini_max_input_chars: int | None = None,
     extract_knowledge_items: bool = False,
     knowledge_language: str = "source",
     knowledge_min_importance: int = 1,
@@ -76,6 +86,23 @@ def run_pipeline(
     target_padding: float = 0.35,
 ) -> Path:
     paths = build_result_paths(video)
+    llm_config = LLMConfig.from_env(
+        provider=llm_provider, ollama_model=ollama_model, ollama_url=ollama_url,
+        ollama_timeout=ollama_timeout, gemini_model=gemini_model,
+        gemini_timeout=gemini_timeout, gemini_max_retries=gemini_max_retries,
+        gemini_max_input_chars=gemini_max_input_chars,
+    )
+    if (
+        llm_config.provider == "gemini"
+        and any((semantic_segment, extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions))
+        and not os.getenv("GEMINI_API_KEY")
+    ):
+        raise LLMError(
+            "GEMINI_API_KEY is not configured. Set it in the environment before using Gemini."
+        )
+
+    def llm():
+        return create_llm_provider(llm_config)
     if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions, extract_card_images_stage, build_anki_deck_stage, transcribe_target_stage)) > 1:
         raise ValueError(
             "Используйте только один из флагов --extract-knowledge, "
@@ -163,7 +190,7 @@ def run_pipeline(
                 "Не найден knowledge_items.json. Сначала выполните --extract-knowledge."
             )
         LOGGER.info("Извлечение выражений языка %s: model=%s", target_language, ollama_model)
-        client = OllamaClient(ollama_model, ollama_url, ollama_timeout)
+        client = llm()
         extract_target_expressions(
             paths.transcript_json,
             paths.knowledge_items_json,
@@ -195,7 +222,7 @@ def run_pipeline(
                 "Не найден knowledge_review.json. Сначала выполните --review-knowledge."
             )
         LOGGER.info("Генерация кандидатов карточек: model=%s", ollama_model)
-        client = OllamaClient(ollama_model, ollama_url, ollama_timeout)
+        client = llm()
         generate_card_candidates(
             paths.knowledge_items_json,
             paths.knowledge_review_json,
@@ -216,7 +243,7 @@ def run_pipeline(
                 "Не найден knowledge_items.json. Сначала выполните --extract-knowledge."
             )
         LOGGER.info("Knowledge Review через Ollama: model=%s", ollama_model)
-        client = OllamaClient(ollama_model, ollama_url, ollama_timeout)
+        client = llm()
         review_knowledge(
             paths.knowledge_items_json,
             paths.knowledge_review_json,
@@ -240,11 +267,7 @@ def run_pipeline(
                 f'py -m src.pipeline "{video}" --semantic-segment'
             )
         LOGGER.info("Извлечение атомарных знаний: model=%s", ollama_model)
-        client = OllamaClient(
-            model=ollama_model,
-            base_url=ollama_url,
-            timeout=ollama_timeout,
-        )
+        client = llm()
         extract_knowledge(
             paths.transcript_json,
             paths.semantic_segments_json,
@@ -296,11 +319,7 @@ def run_pipeline(
             )
         else:
             LOGGER.info("Смысловая сегментация через Ollama: model=%s", ollama_model)
-            client = OllamaClient(
-                model=ollama_model,
-                base_url=ollama_url,
-                timeout=ollama_timeout,
-            )
+            client = llm()
             semantic_segment_transcript(
                 paths.transcript_json,
                 paths.semantic_segments_json,
@@ -340,6 +359,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=120.0,
         help="Таймаут одного запроса к Ollama в секундах",
+    )
+    parser.add_argument(
+        "--llm-provider", choices=("ollama", "gemini"), default=None,
+        help="LLM provider; overrides LLM_PROVIDER",
+    )
+    parser.add_argument(
+        "--gemini-model", default=None,
+        help="Gemini model; overrides GEMINI_MODEL",
     )
     parser.add_argument(
         "--extract-knowledge",
@@ -445,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
             ollama_model=args.ollama_model,
             ollama_url=args.ollama_url,
             ollama_timeout=args.ollama_timeout,
+            llm_provider=args.llm_provider,
+            gemini_model=args.gemini_model,
             extract_knowledge_items=args.extract_knowledge,
             knowledge_language=args.knowledge_language,
             knowledge_min_importance=args.knowledge_min_importance,
@@ -469,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
         ValueError,
         AudioExtractionError,
         TranscriptionError,
-        OllamaError,
+        LLMError,
         SemanticSegmentationError,
         KnowledgeExtractionError,
         KnowledgeReviewError,

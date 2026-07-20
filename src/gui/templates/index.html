@@ -27,9 +27,12 @@
       <label>Изучаемый язык<input name="target_language" value="ja"></label>
       <label>Whisper model<input name="model" value="small"></label>
       <label>Device<select name="device"><option>auto</option><option>cuda</option><option>cpu</option></select></label>
+      <fieldset><legend>LLM provider</legend><label><input type="radio" name="llm_provider" value="ollama" checked> Ollama</label><label><input type="radio" name="llm_provider" value="gemini"> Gemini</label></fieldset>
       <label>Ollama model<input name="ollama_model" value="qwen3:8b"></label>
       <label>Ollama URL<input name="ollama_url" value="http://localhost:11434"></label>
       <label>Ollama timeout<input type="number" name="ollama_timeout" value="120"></label>
+      <label>Gemini model<input name="gemini_model" value="gemini-3.1-flash-lite"></label>
+      <p class="hint">GEMINI_API_KEY {{ 'detected' if gemini_key_detected else 'is not configured' }}</p>
       <label>Frames per card<input type="number" min="1" max="20" name="frames_per_card" value="5"></label>
       <label>Image policy<select name="image_policy"><option>auto</option><option>always</option><option>never</option></select></label>
       <label class="check"><input type="checkbox" name="force" value="true"> Force</label>

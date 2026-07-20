@@ -89,6 +89,7 @@ class PipelineRunner:
             model=request.model, device=request.device, language=request.language,
             force=request.force, ollama_model=request.ollama_model,
             ollama_url=request.ollama_url, ollama_timeout=request.ollama_timeout,
+            llm_provider=request.llm_provider, gemini_model=request.gemini_model,
             knowledge_language=request.knowledge_language,
             knowledge_min_importance=request.knowledge_min_importance,
             knowledge_max_items_per_segment=request.knowledge_max_items_per_segment,

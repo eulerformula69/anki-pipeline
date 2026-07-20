@@ -265,6 +265,56 @@ output/video/
 JSON содержит имя исходного файла, определённый язык, длительность, модель и
 массив сегментов с точными значениями `start`/`end` в секундах.
 
+## Gemini API или локальный Ollama
+
+Ollama остаётся режимом по умолчанию. Для облачного режима создайте ключ в
+[Google AI Studio](https://aistudio.google.com/app/apikey) и передайте его только через
+системную переменную окружения. Не сохраняйте настоящий ключ в `.env` или репозитории.
+
+> При выборе Gemini текст транскрипта, субтитры, выделенные фрагменты и другой текст,
+> включённый в prompt, отправляются во внешний Google API. Видео, аудио и изображения
+> в Gemini не загружаются. Бесплатная квота ограничена; после её исчерпания API вернёт
+> понятную ошибку и не переключит pipeline на Ollama автоматически.
+
+PowerShell:
+
+```powershell
+$env:GEMINI_API_KEY="..."
+$env:LLM_PROVIDER="gemini"
+$env:GEMINI_MODEL="gemini-3.1-flash-lite"
+py -m src.pipeline "input/video.mp4" --semantic-segment
+```
+
+cmd:
+
+```bat
+set GEMINI_API_KEY=...
+set LLM_PROVIDER=gemini
+set GEMINI_MODEL=gemini-3.1-flash-lite
+py -m src.pipeline "input/video.mp4" --semantic-segment
+```
+
+Linux/macOS:
+
+```bash
+export GEMINI_API_KEY="..."
+export LLM_PROVIDER="gemini"
+export GEMINI_MODEL="gemini-3.1-flash-lite"
+python -m src.pipeline "input/video.mp4" --semantic-segment
+```
+
+CLI-параметры `--llm-provider` и `--gemini-model` имеют приоритет над окружением.
+Вернуться к локальному режиму можно через `LLM_PROVIDER=ollama` либо
+`--llm-provider ollama`. Небольшая проверка без полного pipeline:
+
+```powershell
+py -c "from src.config import LLMConfig; from src.llm_factory import create_llm_provider; print(create_llm_provider(LLMConfig.from_env()).generate_json('Return an object with ok=true', schema={'type':'object','required':['ok'],'properties':{'ok':{'type':'boolean'}}})[0])"
+```
+
+Unit-тесты не выполняют реальные запросы: `py -m pytest -q`. Модель по умолчанию
+задаётся одной константой и может быть недоступна отдельному аккаунту — в этом случае
+выберите доступную модель в Google AI Studio и задайте `GEMINI_MODEL`.
+
 ## Смысловая сегментация через Ollama
 
 Установите Ollama с официального сайта, затем загрузите одну модель:

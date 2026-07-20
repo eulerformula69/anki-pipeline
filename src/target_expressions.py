@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import TargetExpression, TargetExpressionCollection, TranscriptSegment
-from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
 from .ollama_schemas import target_expression_response_schema
 from .progress import ActivityIndicator
 from .review import load_knowledge_items
@@ -261,13 +261,10 @@ def load_native_evidence(path: Path | None) -> dict[int, list[str]]:
 
 def extract_target_expressions(
     transcript_path: Path, knowledge_path: Path, destination: Path, diagnostic_path: Path,
-    client: OllamaClient, *, target_language: str,
+    client: StructuredLLM, *, target_language: str,
     glossary_path: Path | None = None,
     target_transcript_path: Path | None = None,
 ) -> TargetExpressionCollection:
-    if isinstance(client, OllamaClient):
-        client.format_schema = SCHEMA
-        client.num_predict = 1400
     source, _, items = load_knowledge_items(knowledge_path)
     try:
         transcript_data = json.loads(transcript_path.read_text(encoding="utf-8"))
@@ -294,9 +291,9 @@ def extract_target_expressions(
             try:
                 label = f"Ollama Expressions: окно {window_number}/{len(windows)}"
                 with ActivityIndicator(label + (" (retry)" if attempt else "")):
-                    data, raw = client.generate_json(build_prompt(
+                    data, raw = generate_structured(client, build_prompt(
                         window, target_language, correction, native_evidence
-                    ))
+                    ), schema=SCHEMA, max_output_tokens=1400)
                 responses.append(raw)
                 all_expressions.extend(parse_response(
                     data, items, target_language, glossary,
@@ -305,7 +302,7 @@ def extract_target_expressions(
                     primary_evidence,
                 ))
                 break
-            except OllamaInvalidResponseError as exc:
+            except LLMInvalidResponseError as exc:
                 responses.append(exc.raw_response)
                 error = str(exc)
                 partial = recover_partial_expressions(exc.raw_response)
@@ -327,7 +324,7 @@ def extract_target_expressions(
                         break
             except TargetExpressionError as exc:
                 error = str(exc)
-            except OllamaError:
+            except LLMError:
                 raise
             if attempt == 1:
                 if error and all(

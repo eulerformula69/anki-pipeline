@@ -6,8 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 from urllib import error, request
 
+from .llm import LLMError, LLMInvalidResponseError
 
-class OllamaError(RuntimeError):
+
+class OllamaError(LLMError):
     """Base error with a user-readable message."""
 
 
@@ -23,7 +25,7 @@ class OllamaHTTPError(OllamaError):
     pass
 
 
-class OllamaInvalidResponseError(OllamaError):
+class OllamaInvalidResponseError(OllamaError, LLMInvalidResponseError):
     def __init__(self, message: str, raw_response: str = "") -> None:
         super().__init__(message)
         self.raw_response = raw_response
@@ -38,16 +40,23 @@ class OllamaClient:
     format_schema: dict[str, Any] | None = field(default=None, repr=False)
     num_predict: int | None = field(default=None, repr=False)
 
-    def generate_json(self, prompt: str) -> tuple[dict[str, Any], str]:
-        options: dict[str, Any] = {"temperature": 0}
-        if self.num_predict is not None:
-            options["num_predict"] = self.num_predict
+    provider_name: str = field(default="Ollama", init=False)
+
+    def generate_json(
+        self, prompt: str, *, schema: dict[str, Any] | None = None,
+        system_prompt: str | None = None, temperature: float | None = None,
+        max_output_tokens: int | None = None,
+    ) -> tuple[dict[str, Any], str]:
+        options: dict[str, Any] = {"temperature": 0 if temperature is None else temperature}
+        token_limit = max_output_tokens if max_output_tokens is not None else self.num_predict
+        if token_limit is not None:
+            options["num_predict"] = token_limit
         payload = json.dumps(
             {
                 "model": self.model,
-                "prompt": prompt,
+                "prompt": f"{system_prompt}\n\n{prompt}" if system_prompt else prompt,
                 "stream": False,
-                "format": self.format_schema or "json",
+                "format": schema or self.format_schema or "json",
                 "think": False,
                 "options": options,
             },

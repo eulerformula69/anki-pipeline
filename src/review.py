@@ -14,7 +14,7 @@ from .models import (
     KnowledgeReview,
     KnowledgeReviewCollection,
 )
-from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
 from .ollama_schemas import review_response_schema
 from .progress import ActivityIndicator
 from .semantic import save_json_atomic
@@ -282,10 +282,8 @@ def review_knowledge(
     knowledge_path: Path,
     destination: Path,
     diagnostic_path: Path,
-    client: OllamaClient,
+    client: StructuredLLM,
 ) -> KnowledgeReviewCollection:
-    if isinstance(client, OllamaClient):
-        client.format_schema = REVIEW_RESPONSE_SCHEMA
     source, _, items = load_knowledge_items(knowledge_path)
     groups = group_knowledge_items(items)
     reviews: list[KnowledgeReview] = []
@@ -305,20 +303,20 @@ def review_knowledge(
                     group, previous_response=previous, errors=validation_errors
                 )
                 with ActivityIndicator(label):
-                    data, raw = client.generate_json(prompt)
+                    data, raw = generate_structured(client, prompt, schema=REVIEW_RESPONSE_SCHEMA)
                 responses.append(raw)
                 reviews.extend(
                     parse_review_response(data, expected_ids, raw_response=raw)
                 )
                 break
-            except OllamaInvalidResponseError as exc:
+            except LLMInvalidResponseError as exc:
                 previous = exc.raw_response
                 responses.append(exc.raw_response)
                 validation_errors = [str(exc)]
             except KnowledgeReviewError as exc:
                 previous = responses[-1] if responses else ""
                 validation_errors = str(exc).split(" | ")
-            except OllamaError:
+            except LLMError:
                 raise
             if attempt == 1:
                 message = " | ".join(validation_errors or ["Неизвестная ошибка."])

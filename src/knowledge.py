@@ -16,7 +16,7 @@ from .models import (
     SemanticSegment,
     TranscriptSegment,
 )
-from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
 from .progress import ActivityIndicator
 from .semantic import save_json_atomic
 
@@ -392,7 +392,7 @@ def extract_knowledge(
     semantic_path: Path,
     destination: Path,
     diagnostic_path: Path,
-    client: OllamaClient,
+    client: StructuredLLM,
     *,
     language: str = "source",
     min_importance: int = 1,
@@ -434,7 +434,7 @@ def extract_knowledge(
                     errors=validation_errors,
                 )
                 with ActivityIndicator(label):
-                    data, raw = client.generate_json(prompt)
+                    data, raw = generate_structured(client, prompt, schema={"type": "object"})
                 raw_responses.append(raw)
                 block_proposals = parse_knowledge_response(
                     data,
@@ -445,14 +445,14 @@ def extract_knowledge(
                 )
                 proposals.extend(block_proposals)
                 break
-            except OllamaInvalidResponseError as exc:
+            except LLMInvalidResponseError as exc:
                 previous_response = exc.raw_response
                 raw_responses.append(exc.raw_response)
                 validation_errors = [str(exc)]
             except KnowledgeExtractionError as exc:
                 previous_response = raw_responses[-1] if raw_responses else ""
                 validation_errors = str(exc).split(" | ")
-            except OllamaError:
+            except LLMError:
                 raise
             if attempt == 1:
                 message = " | ".join(validation_errors or ["Неизвестная ошибка ответа."])

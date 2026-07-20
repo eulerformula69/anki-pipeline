@@ -11,3 +11,4 @@ output/*
 repomix-output.*
 .npm-cache/
 .test-tmp*/
+.env

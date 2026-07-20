@@ -25,7 +25,7 @@ from .card_enrichment import (
     proposal_to_candidate,
     localize_card_text,
 )
-from .ollama_client import OllamaClient, OllamaError, OllamaInvalidResponseError
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
 from .ollama_schemas import card_response_schema
 from .progress import ActivityIndicator
 from .review import (
@@ -356,11 +356,9 @@ def generate_card_candidates(
     review_path: Path,
     destination: Path,
     diagnostic_path: Path,
-    client: OllamaClient,
+    client: StructuredLLM,
     expressions_path: Path | None = None,
 ) -> CardCandidateCollection:
-    if isinstance(client, OllamaClient):
-        client.format_schema = CARD_RESPONSE_SCHEMA
     source, _, items = load_knowledge_items(knowledge_path)
     _, _, reviews = load_knowledge_reviews(review_path)
     validate_review_coverage(items, reviews)
@@ -384,7 +382,7 @@ def generate_card_candidates(
                     errors=validation_errors,
                 )
                 with ActivityIndicator(label):
-                    data, raw = client.generate_json(prompt)
+                    data, raw = generate_structured(client, prompt, schema=CARD_RESPONSE_SCHEMA)
                 responses.append(raw)
                 proposals.extend(
                     parse_card_response(
@@ -392,14 +390,14 @@ def generate_card_candidates(
                     )
                 )
                 break
-            except OllamaInvalidResponseError as exc:
+            except LLMInvalidResponseError as exc:
                 previous = exc.raw_response
                 responses.append(exc.raw_response)
                 validation_errors = [str(exc)]
             except CardGenerationError as exc:
                 previous = responses[-1] if responses else ""
                 validation_errors = str(exc).split(" | ")
-            except OllamaError:
+            except LLMError:
                 raise
             if attempt == 1:
                 message = " | ".join(validation_errors or ["Неизвестная ошибка."])
