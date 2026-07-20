@@ -14,7 +14,7 @@ from .models import (
     KnowledgeReview,
     KnowledgeReviewCollection,
 )
-from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured, provider_label
 from .ollama_schemas import review_response_schema
 from .progress import ActivityIndicator
 from .semantic import save_json_atomic
@@ -295,7 +295,7 @@ def review_knowledge(
         previous: str | None = None
         validation_errors: list[str] | None = None
         for attempt in range(2):
-            label = f"Ollama Review: группа {group_number}/{len(groups)}"
+            label = f"{provider_label(client)} Review: группа {group_number}/{len(groups)}"
             if attempt:
                 label += ", повторная попытка"
             try:

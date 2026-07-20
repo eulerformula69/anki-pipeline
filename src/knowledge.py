@@ -16,7 +16,10 @@ from .models import (
     SemanticSegment,
     TranscriptSegment,
 )
-from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
+from .llm import (
+    LLMError, LLMInvalidResponseError, StructuredLLM,
+    generate_structured, provider_label,
+)
 from .progress import ActivityIndicator
 from .semantic import save_json_atomic
 
@@ -42,6 +45,29 @@ PROPOSAL_FIELDS = {
     "importance",
     "source_transcript_segment_ids",
 }
+
+
+def knowledge_response_schema(max_items: int) -> dict[str, Any]:
+    return {
+        "type": "object", "required": ["knowledge_items"],
+        "properties": {"knowledge_items": {
+            "type": "array", "maxItems": max_items,
+            "items": {
+                "type": "object",
+                "required": sorted(PROPOSAL_FIELDS),
+                "properties": {
+                    "type": {"type": "string", "enum": sorted(ALLOWED_TYPES)},
+                    "statement": {"type": "string"},
+                    "explanation": {"type": "string"},
+                    "importance": {"type": "integer", "minimum": 1, "maximum": 5},
+                    "source_transcript_segment_ids": {
+                        "type": "array", "minItems": 1,
+                        "items": {"type": "integer"},
+                    },
+                },
+            },
+        }},
+    }
 
 
 class KnowledgeExtractionError(RuntimeError):
@@ -421,7 +447,7 @@ def extract_knowledge(
         previous_response: str | None = None
         validation_errors: list[str] | None = None
         for attempt in range(2):
-            label = f"Ollama: блок {block_number}/{len(semantic_segments)}"
+            label = f"{provider_label(client)}: блок {block_number}/{len(semantic_segments)}"
             if attempt:
                 label += ", повторная попытка"
             try:
@@ -434,7 +460,10 @@ def extract_knowledge(
                     errors=validation_errors,
                 )
                 with ActivityIndicator(label):
-                    data, raw = generate_structured(client, prompt, schema={"type": "object"})
+                    data, raw = generate_structured(
+                        client, prompt,
+                        schema=knowledge_response_schema(max_items_per_segment),
+                    )
                 raw_responses.append(raw)
                 block_proposals = parse_knowledge_response(
                     data,
@@ -464,9 +493,10 @@ def extract_knowledge(
                     model=client.model,
                 )
                 LOGGER.warning(
-                    "Блок %s пропущен после двух некорректных ответов Ollama. "
+                    "Блок %s пропущен после двух некорректных ответов %s. "
                     "Диагностика: %s",
                     semantic.id,
+                    provider_label(client),
                     diagnostic_path,
                 )
                 proposals.append(KnowledgeProposal(

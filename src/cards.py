@@ -25,7 +25,7 @@ from .card_enrichment import (
     proposal_to_candidate,
     localize_card_text,
 )
-from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured, provider_label
 from .ollama_schemas import card_response_schema
 from .progress import ActivityIndicator
 from .review import (
@@ -371,7 +371,7 @@ def generate_card_candidates(
         previous: str | None = None
         validation_errors: list[str] | None = None
         for attempt in range(2):
-            label = f"Ollama Cards: группа {group_number}/{len(groups)}"
+            label = f"{provider_label(client)} Cards: группа {group_number}/{len(groups)}"
             if attempt:
                 label += ", повторная попытка"
             try:

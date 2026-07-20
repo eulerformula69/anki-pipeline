@@ -40,3 +40,7 @@ def generate_structured(
     return client.generate_json(
         prompt, schema=schema, max_output_tokens=max_output_tokens
     )
+
+
+def provider_label(client: StructuredLLM) -> str:
+    return getattr(client, "provider_name", "LLM")

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import TargetExpression, TargetExpressionCollection, TranscriptSegment
-from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
+from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured, provider_label
 from .ollama_schemas import target_expression_response_schema
 from .progress import ActivityIndicator
 from .review import load_knowledge_items
@@ -289,7 +289,7 @@ def extract_target_expressions(
                 f"\nVALIDATION ERROR: {error}. Correct the complete JSON now."
             )
             try:
-                label = f"Ollama Expressions: окно {window_number}/{len(windows)}"
+                label = f"{provider_label(client)} Expressions: окно {window_number}/{len(windows)}"
                 with ActivityIndicator(label + (" (retry)" if attempt else "")):
                     data, raw = generate_structured(client, build_prompt(
                         window, target_language, correction, native_evidence
@@ -344,10 +344,11 @@ def extract_target_expressions(
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }, diagnostic_path)
                 LOGGER.warning(
-                    "Окно %d/%d пропущено после двух некорректных ответов Ollama. "
+                    "Окно %d/%d пропущено после двух некорректных ответов %s. "
                     "Диагностика: %s",
                     window_number,
                     len(windows),
+                    provider_label(client),
                     diagnostic_path,
                 )
                 had_fallback = True

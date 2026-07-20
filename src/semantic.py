@@ -7,10 +7,31 @@ from pathlib import Path
 from typing import Any
 
 from .models import SemanticSegment, SemanticTranscript, TranscriptSegment
-from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured
+from .llm import (
+    LLMError, LLMInvalidResponseError, StructuredLLM,
+    generate_structured, provider_label,
+)
 from .progress import ActivityIndicator
 
 LOGGER = logging.getLogger("anki_pipeline.semantic")
+SEMANTIC_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object", "required": ["segments"],
+    "properties": {"segments": {
+        "type": "array", "minItems": 1,
+        "items": {
+            "type": "object",
+            "required": ["title", "summary", "transcript_segment_ids"],
+            "properties": {
+                "title": {"type": "string"},
+                "summary": {"type": "string"},
+                "transcript_segment_ids": {
+                    "type": "array", "minItems": 1,
+                    "items": {"type": "integer"},
+                },
+            },
+        },
+    }},
+}
 
 
 class SemanticSegmentationError(RuntimeError):
@@ -223,10 +244,11 @@ def semantic_segment_transcript(
             try:
                 retry_label = " (повтор)" if attempt else ""
                 with ActivityIndicator(
-                    f"Ollama: окно {window_number}/{len(windows)}{retry_label}"
+                    f"{provider_label(client)}: окно {window_number}/{len(windows)}{retry_label}"
                 ):
                     data, raw = generate_structured(
-                        client, build_prompt(window, format_error), schema={"type": "object"}
+                        client, build_prompt(window, format_error),
+                        schema=SEMANTIC_RESPONSE_SCHEMA,
                     )
                 responses.append(raw)
                 proposals = parse_proposals(data, window.core_ids)
@@ -243,7 +265,7 @@ def semantic_segment_transcript(
                 message = f"Окно {window_number}: {format_error}"
                 save_diagnostic(diagnostic_path, message, responses)
                 raise SemanticSegmentationError(
-                    f"Ollama дважды вернул некорректный результат. {message} "
+                    f"{provider_label(client)} дважды вернул некорректный результат. {message} "
                     f"Диагностика: {diagnostic_path}"
                 )
 
