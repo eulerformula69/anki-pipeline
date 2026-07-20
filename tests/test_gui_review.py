@@ -41,6 +41,36 @@ def test_approval_rejects_empty_included_card(tmp_path):
         store.approve(output)
 
 
+def test_stale_card_with_removed_media_no_longer_blocks_review(tmp_path):
+    output = project(tmp_path)
+    media_dir = output / "media"
+    media_dir.mkdir()
+    image = media_dir / "c_1.jpg"
+    image.write_bytes(b"image")
+    (output / "card_media.json").write_text(json.dumps({
+        "cards": [{"card_id": "c_1", "image": {"path": "media/c_1.jpg", "timestamp": 1.0}}]
+    }), encoding="utf-8")
+    store = ReviewStore()
+    first = store.load_or_create(output)
+    assert first["cards"][0]["image"]["mode"] == "automatic"
+
+    image.unlink()
+    replacement = {
+        "source": "lesson.mp4", "card_candidates": [{
+            "card_id": "c_2", "card_type": "basic", "front": "New", "back": "Card",
+            "extra": "", "tags": [], "difficulty": 1, "importance": 1,
+            "knowledge_ids": ["k2"], "source_transcript_segment_ids": [2],
+        }],
+    }
+    (output / "card_candidates.json").write_text(json.dumps(replacement), encoding="utf-8")
+
+    refreshed = store.load_or_create(output)
+    stale = next(card for card in refreshed["cards"] if card["card_id"] == "c_1")
+    assert stale["stale"] is True
+    assert stale["included"] is False
+    assert stale["image"] == {"mode": "none"}
+
+
 def test_image_action_returns_only_media_fragment_without_page_reload(tmp_path):
     output = tmp_path / "output" / "video"
     output.mkdir(parents=True, exist_ok=True)

@@ -60,8 +60,16 @@ class ReviewStore:
                     if raw["card_id"] not in known:
                         review["cards"].append(self._draft_card(raw, output))
                 current = {raw["card_id"] for raw in raw_cards}
+                repaired_stale = False
                 for card in review["cards"]:
                     card["stale"] = card["card_id"] not in current
+                    if card["stale"]:
+                        if card.get("included") or (card.get("image") or {}).get("mode") != "none":
+                            repaired_stale = True
+                        card["included"] = False
+                        card["image"] = {"mode": "none"}
+                if repaired_stale:
+                    review.update(status="draft", approved_at=None, updated_at=now_iso())
                 self.validate(review, output, approving=False)
                 atomic_json(review, approved)
                 return review
