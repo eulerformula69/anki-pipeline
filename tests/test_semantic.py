@@ -7,6 +7,7 @@ from src.semantic import (
     ProposedBlock,
     SemanticSegmentationError,
     assemble_result,
+    build_prompt,
     build_windows,
     parse_proposals,
     semantic_segment_transcript,
@@ -78,6 +79,16 @@ def test_windows_keep_overlap_outside_core() -> None:
     assert len(windows) > 1
     assert windows[0].core_ids == [0]
     assert [segment.id for segment in windows[1].context][:2] == [0, 1]
+
+
+def test_semantic_prompt_uses_selected_card_language() -> None:
+    window = build_windows(transcript_segments())[0]
+    assert "Write title and summary in English" in build_prompt(
+        window, output_language="en"
+    )
+    assert "Write title and summary in Russian" in build_prompt(
+        window, output_language="ru"
+    )
 
 
 class RetryClient:

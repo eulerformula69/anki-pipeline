@@ -28,6 +28,7 @@
       <label>Whisper model<input name="model" value="small"></label>
       <label>Device<select name="device"><option>auto</option><option>cuda</option><option>cpu</option></select></label>
       <fieldset><legend>LLM provider</legend><label><input type="radio" name="llm_provider" value="ollama" checked> Ollama</label><label><input type="radio" name="llm_provider" value="gemini"> Gemini</label></fieldset>
+      <fieldset><legend>Язык карточек</legend><label><input type="radio" name="knowledge_language" value="en" checked> English</label><label><input type="radio" name="knowledge_language" value="ru"> Русский</label><label><input type="radio" name="knowledge_language" value="source"> Как в источнике</label></fieldset>
       <label>Ollama model<input name="ollama_model" value="qwen3:8b"></label>
       <label>Ollama URL<input name="ollama_url" value="http://localhost:11434"></label>
       <label>Ollama timeout<input type="number" name="ollama_timeout" value="120"></label>

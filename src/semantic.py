@@ -107,6 +107,7 @@ def build_windows(
 def build_prompt(
     window: SegmentWindow, format_error: str | None = None,
     target_evidence: dict[int, list[str]] | None = None,
+    output_language: str = "source",
 ) -> str:
     core_ids = set(window.core_ids)
     lines = [
@@ -122,6 +123,13 @@ def build_prompt(
         if format_error
         else ""
     )
+    language_instruction = {
+        "en": "Write title and summary in English.",
+        "ru": "Write title and summary in Russian.",
+        "source": "Write title and summary in the primary transcript's language.",
+    }.get(output_language)
+    if language_instruction is None:
+        raise SemanticSegmentationError("output language must be source, ru or en.")
     return f"""Раздели CORE-сегменты транскрипции на последовательные смысловые блоки.
 CONTEXT дан только для понимания границ; не включай его ID в результат.
 Верни только JSON-объект вида:
@@ -131,7 +139,7 @@ CONTEXT дан только для понимания границ; не вкл�
 - блоки непустые и состоят только из соседних CORE ID;
 - title и summary должны быть непустыми;
 - не возвращай исходный текст, start или end;
-- пиши title и summary на русском языке.{correction}
+- {language_instruction}{correction}
 
 CORE IDs: {window.core_ids}
 Транскрипция:
@@ -211,6 +219,7 @@ def assemble_result(
     transcript_segments: list[TranscriptSegment],
     proposals: list[ProposedBlock],
     target_evidence: dict[int, list[str]] | None = None,
+    output_language: str = "source",
 ) -> SemanticTranscript:
     by_id = {segment.id: segment for segment in transcript_segments}
     expected_ids = [segment.id for segment in transcript_segments]
@@ -239,7 +248,10 @@ def assemble_result(
                 ).strip(),
             )
         )
-    return SemanticTranscript(source=source, model=model, segments=result_segments)
+    return SemanticTranscript(
+        source=source, model=model, segments=result_segments,
+        output_language=output_language,
+    )
 
 
 def save_json_atomic(data: dict[str, Any], destination: Path) -> None:
@@ -265,6 +277,7 @@ def semantic_segment_transcript(
     client: StructuredLLM,
     *,
     target_transcript_path: Path | None = None,
+    output_language: str = "source",
 ) -> SemanticTranscript:
     source, transcript_segments = load_transcript(transcript_path)
     all_proposals: list[ProposedBlock] = []
@@ -282,7 +295,9 @@ def semantic_segment_transcript(
                     f"{provider_label(client)}: окно {window_number}/{len(windows)}{retry_label}"
                 ):
                     data, raw = generate_structured(
-                        client, build_prompt(window, format_error, target_evidence),
+                        client, build_prompt(
+                            window, format_error, target_evidence, output_language
+                        ),
                         schema=SEMANTIC_RESPONSE_SCHEMA,
                     )
                 responses.append(raw)
@@ -310,6 +325,7 @@ def semantic_segment_transcript(
         transcript_segments,
         merge_adjacent_blocks(all_proposals),
         target_evidence,
+        output_language,
     )
     save_json_atomic(result.to_dict(), destination)
     diagnostic_path.unlink(missing_ok=True)

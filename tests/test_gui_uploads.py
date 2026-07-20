@@ -49,7 +49,9 @@ def test_youtube_prepared_string_path_is_converted_at_gui_boundary(tmp_path, mon
     token = client.get("/").cookies["anki_csrf"]
     response = client.post("/jobs", data={
         "csrf": token, "youtube_url": "https://youtu.be/abc", "stages": "transcription",
+        "knowledge_language": "ru",
     }, follow_redirects=False)
     assert response.status_code == 303
     assert manager.request.video_path == video
     assert manager.request.source == "Lesson title"
+    assert manager.request.knowledge_language == "ru"

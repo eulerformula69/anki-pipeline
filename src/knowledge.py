@@ -91,11 +91,11 @@ def load_knowledge_sources(
         transcript_data = json.loads(transcript_path.read_text(encoding="utf-8"))
         semantic_data = json.loads(semantic_path.read_text(encoding="utf-8"))
         transcript_segments = [
-            TranscriptSegment(
+                TranscriptSegment(
                 id=int(item["id"]),
                 start=float(item["start"]),
                 end=float(item["end"]),
-                text=str(item["text"]),
+                    text=str(item["text"]),
             )
             for item in transcript_data["segments"]
         ]
@@ -109,8 +109,9 @@ def load_knowledge_sources(
                 transcript_segment_ids=[
                     int(segment_id) for segment_id in item["transcript_segment_ids"]
                 ],
-                text=str(item["text"]),
-            )
+                    text=str(item["text"]),
+                    target_language_text=str(item.get("target_language_text", "")),
+                )
             for item in semantic_data["segments"]
         ]
         source = str(transcript_data["source"])

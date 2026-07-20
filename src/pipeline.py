@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -41,6 +42,14 @@ else:
     from .target_transcription import TargetTranscriptionError, transcribe_target_ranges
 
 LOGGER = logging.getLogger("anki_pipeline")
+
+
+def semantic_language_matches(path: Path, language: str) -> bool:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("output_language") == language
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
 
 
 def validate_input(video: Path) -> None:
@@ -226,6 +235,7 @@ def run_pipeline(
             paths.cards_diagnostic_json,
             client,
             paths.target_expressions_json,
+            output_language=knowledge_language,
         )
         LOGGER.info("Кандидаты карточек: %s", paths.card_candidates_json)
         return paths.card_candidates_json
@@ -308,7 +318,10 @@ def run_pipeline(
         save_transcript_text(transcript, paths.transcript_txt)
 
     if semantic_segment:
-        if paths.semantic_segments_json.exists() and not force:
+        if (
+            paths.semantic_segments_json.exists() and not force
+            and semantic_language_matches(paths.semantic_segments_json, knowledge_language)
+        ):
             LOGGER.info(
                 "Смысловая сегментация уже существует: %s",
                 paths.semantic_segments_json,
@@ -322,6 +335,7 @@ def run_pipeline(
                 paths.semantic_diagnostic_json,
                 client,
                 target_transcript_path=paths.target_transcript_json,
+                output_language=knowledge_language,
             )
             LOGGER.info("Смысловые блоки: %s", paths.semantic_segments_json)
 

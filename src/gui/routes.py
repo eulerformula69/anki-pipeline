@@ -167,6 +167,7 @@ async def create_job(
     ollama_timeout: Annotated[float, Form()] = 120.0, frames_per_card: Annotated[int, Form()] = 5,
     llm_provider: Annotated[str, Form()] = "ollama",
     gemini_model: Annotated[str, Form()] = "gemini-3.1-flash-lite",
+    knowledge_language: Annotated[str, Form()] = "en",
     image_policy: Annotated[str, Form()] = "auto", force: Annotated[bool, Form()] = False,
 ):
     _check_csrf(request, csrf)
@@ -182,6 +183,8 @@ async def create_job(
         selected = list(stages or [])
         if not selected:
             raise ValueError("Выберите хотя бы одну стадию.")
+        if knowledge_language not in {"en", "ru", "source"}:
+            raise ValueError("Неизвестный язык карточек.")
         video_path = Path(prepared.video_path)
         migrate_legacy_project(video_path, request.app.state.root / "output")
         paths = build_result_paths(video_path)
@@ -191,6 +194,7 @@ async def create_job(
             model=model, device=device, language=language or None, force=force,
             ollama_model=ollama_model, ollama_url=ollama_url, ollama_timeout=ollama_timeout,
             llm_provider=llm_provider, gemini_model=gemini_model,
+            knowledge_language=knowledge_language,
             target_language=target_language, frames_per_card=frames_per_card, image_policy=image_policy,
         ))
     except (ValueError, SourceIngestError) as exc:

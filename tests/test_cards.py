@@ -8,6 +8,7 @@ from src.card_enrichment import candidates_are_duplicates
 from src.cards import (
     CardGenerationError,
     CardProposal,
+    build_cards_prompt,
     deduplicate_candidates,
     generate_card_candidates,
     localize_existing_candidates,
@@ -28,6 +29,14 @@ def knowledge_items() -> list[KnowledgeItem]:
 
 def review(knowledge_id: str, status: str) -> KnowledgeReview:
     return KnowledgeReview(knowledge_id, status, 0.9, [], "none", "Reason")
+
+
+def test_card_prompt_explicitly_uses_selected_language() -> None:
+    prompt = build_cards_prompt(
+        [knowledge_items()[0]], [review("k_0001", "keep")],
+        output_language="en",
+    )
+    assert "Write front, back, and extra in English" in prompt
 
 
 def card(ids, front="What defines alpha?", back="Alpha is the first element.", **overrides):

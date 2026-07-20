@@ -41,6 +41,7 @@ class SemanticTranscript:
     source: str
     model: str
     segments: list[SemanticSegment]
+    output_language: str = "source"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

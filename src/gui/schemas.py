@@ -36,7 +36,7 @@ class PipelineRunRequest:
     ollama_timeout: float = 120.0
     llm_provider: str = "ollama"
     gemini_model: str = "gemini-3.1-flash-lite"
-    knowledge_language: str = "source"
+    knowledge_language: str = "en"
     knowledge_min_importance: int = 1
     knowledge_max_items_per_segment: int = 12
     target_language: str = "ja"

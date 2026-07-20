@@ -128,6 +128,7 @@ def build_cards_prompt(
     *,
     previous_response: str | None = None,
     errors: list[str] | None = None,
+    output_language: str = "source",
 ) -> str:
     correction = ""
     if previous_response is not None and errors:
@@ -141,6 +142,13 @@ def build_cards_prompt(
         {"knowledge": item.to_dict(), "review": review.__dict__}
         for item, review in zip(items, reviews, strict=True)
     ]
+    language_instruction = {
+        "en": "Write front, back, and extra in English.",
+        "ru": "Write front, back, and extra in Russian.",
+        "source": "Write front, back, and extra in the knowledge language.",
+    }.get(output_language)
+    if language_instruction is None:
+        raise CardGenerationError("card language must be source, ru or en.")
     available_ids = {item.id for item in items}
     merge_requirements: list[str] = []
     split_requirements: list[str] = []
@@ -191,6 +199,7 @@ extra — только дополнительный контекст или пр
 difficulty — целое число 1–5. Не возвращай importance, tags, source IDs или card_id.
 Только обычный текст: без HTML, Markdown, CSS, LaTeX, изображений и аудио.
 Каждый knowledge ID со статусом не discard должен использоваться; discard — ни разу.
+{language_instruction}
 {mandatory}
 Верни только строгий JSON без дополнительных полей:
 {{"card_candidates":[{{"knowledge_ids":["k_0001"],"card_type":"basic","front":"...","back":"...","extra":"","difficulty":3}}]}}{correction}
@@ -358,6 +367,8 @@ def generate_card_candidates(
     diagnostic_path: Path,
     client: StructuredLLM,
     expressions_path: Path | None = None,
+    *,
+    output_language: str = "source",
 ) -> CardCandidateCollection:
     source, _, items = load_knowledge_items(knowledge_path)
     _, _, reviews = load_knowledge_reviews(review_path)
@@ -380,6 +391,7 @@ def generate_card_candidates(
                     group_reviews,
                     previous_response=previous,
                     errors=validation_errors,
+                    output_language=output_language,
                 )
                 with ActivityIndicator(label):
                     data, raw = generate_structured(client, prompt, schema=CARD_RESPONSE_SCHEMA)

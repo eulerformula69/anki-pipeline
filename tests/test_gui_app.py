@@ -9,6 +9,8 @@ def test_index_has_sources_stages_and_no_export(tmp_path):
     assert "YouTube URL" in response.text
     assert "Выбрать видеофайл" in response.text
     assert 'value="transcription"' in response.text
+    assert 'name="knowledge_language" value="en" checked' in response.text
+    assert 'name="knowledge_language" value="ru"' in response.text
     assert "Запустить конвейер" in response.text
     assert "build_anki" not in response.text
 
