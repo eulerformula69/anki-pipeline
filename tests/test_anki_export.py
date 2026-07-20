@@ -1,0 +1,152 @@
+import json
+import sys
+import types
+from pathlib import Path
+
+import pytest
+
+from src.anki_export import (
+    AnkiExportError,
+    FIELD_NAMES,
+    build_anki_deck,
+    load_card_candidates,
+    load_card_media,
+    load_verified_expressions,
+    stable_deck_id,
+    stable_guid,
+)
+
+
+def write_inputs(root: Path, *, with_image: bool = True) -> tuple[Path, Path, Path]:
+    cards = root / "card_candidates.json"
+    expressions = root / "target_expressions.json"
+    media = root / "card_media.json"
+    cards.write_text(json.dumps({
+        "source": "lesson.mkv", "model": "qwen3:8b", "card_candidates": [{
+            "card_id": "c_0001", "knowledge_ids": ["k_0001"], "card_type": "basic",
+            "front": "What is A & B?", "back": "A < B", "extra": "context",
+            "difficulty": 2, "importance": 4, "tags": ["definition"],
+            "source_transcript_segment_ids": [1],
+            "expression_ids": ["e_verified", "e_review"],
+        }],
+    }, ensure_ascii=False), encoding="utf-8")
+    expressions.write_text(json.dumps({"source": "lesson.mkv", "expressions": [
+        {"id": "e_verified", "language": "ja", "surface": "明日", "reading": "あした",
+         "romanization": "ashita", "meaning": "tomorrow", "knowledge_ids": ["k_0001"],
+         "source_transcript_segment_ids": [1], "verification": "verified", "confidence": .9,
+         "type": "term"},
+        {"id": "e_review", "language": "ja", "surface": "偽物", "reading": "にせもの",
+         "romanization": "nisemono", "meaning": "unverified", "knowledge_ids": ["k_0001"],
+         "source_transcript_segment_ids": [1], "verification": "needs_review", "confidence": .5,
+         "type": "term"},
+    ]}, ensure_ascii=False), encoding="utf-8")
+    image = root / "media" / "c_0001.jpg"
+    if with_image:
+        image.parent.mkdir()
+        image.write_bytes(b"jpeg")
+    media.write_text(json.dumps({"source": "lesson.mkv", "cards": [{
+        "card_id": "c_0001", "start": 12.5,
+        "image": {"path": "media/c_0001.jpg"} if with_image else None,
+    }]}), encoding="utf-8")
+    return cards, expressions, media
+
+
+class FakeModel:
+    def __init__(self, model_id, name, **kwargs):
+        self.model_id, self.name, self.kwargs = model_id, name, kwargs
+
+
+class FakeNote:
+    def __init__(self, model, fields, tags):
+        self.model, self.fields, self.tags = model, fields, tags
+
+
+class FakeDeck:
+    def __init__(self, deck_id, name):
+        self.deck_id, self.name, self.notes = deck_id, name, []
+
+    def add_note(self, note):
+        self.notes.append(note)
+
+
+class FakePackage:
+    last = None
+
+    def __init__(self, deck):
+        self.deck, self.media_files = deck, []
+        FakePackage.last = self
+
+    def write_to_file(self, path):
+        Path(path).write_bytes(b"fake-apkg")
+
+
+@pytest.fixture
+def fake_genanki(monkeypatch):
+    module = types.SimpleNamespace(
+        Model=FakeModel, Note=FakeNote, Deck=FakeDeck, Package=FakePackage,
+    )
+    monkeypatch.setitem(sys.modules, "genanki", module)
+    return module
+
+
+def test_stable_identifiers_are_deterministic_and_card_specific() -> None:
+    assert stable_guid("lesson.mkv", "c_0001") == stable_guid("lesson.mkv", "c_0001")
+    assert stable_guid("lesson.mkv", "c_0001") != stable_guid("lesson.mkv", "c_0002")
+    assert stable_deck_id("lesson.mkv") == stable_deck_id("lesson.mkv")
+    assert 1 << 30 <= stable_deck_id("lesson.mkv") < 1 << 31
+
+
+def test_loaders_filter_unverified_and_reject_unsafe_media(tmp_path) -> None:
+    cards, expressions, media = write_inputs(tmp_path)
+    source, loaded = load_card_candidates(cards)
+    assert source == "lesson.mkv" and loaded[0].card_id == "c_0001"
+    assert list(load_verified_expressions(expressions)) == ["e_verified"]
+    data = json.loads(media.read_text(encoding="utf-8"))
+    data["cards"][0]["image"]["path"] = "../secret.jpg"
+    media.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(AnkiExportError, match="относительным"):
+        load_card_media(media, tmp_path)
+
+
+def test_build_deck_escapes_html_packages_media_and_writes_manifest(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path)
+    destination = tmp_path / "lesson.apkg"
+    manifest = tmp_path / "anki_export_manifest.json"
+    exported = build_anki_deck(cards, expressions, media, destination, manifest)
+    package = FakePackage.last
+    note = package.deck.notes[0]
+    assert destination.read_bytes() == b"fake-apkg"
+    assert len(note.fields) == len(FIELD_NAMES)
+    assert note.fields[0] == "What is A &amp; B?"
+    assert note.fields[1] == "A &lt; B"
+    assert "明日" in note.fields[3] and "偽物" not in note.fields[3]
+    assert note.fields[6].startswith('<img src="')
+    assert Path(package.media_files[0]).name == exported[0].media
+    assert note.guid == stable_guid("lesson.mkv", "c_0001")
+    result = json.loads(manifest.read_text(encoding="utf-8"))
+    assert result["notes"][0]["expression_ids"] == ["e_verified"]
+    assert result["notes"][0]["start_seconds"] == 12.5
+
+
+def test_missing_optional_files_builds_text_only_deck(tmp_path, fake_genanki) -> None:
+    cards, _, _ = write_inputs(tmp_path)
+    exported = build_anki_deck(
+        cards, tmp_path / "missing-expressions.json", tmp_path / "missing-media.json",
+        tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+    )
+    assert exported[0].expression_ids == []
+    assert exported[0].media is None
+    assert FakePackage.last.media_files == []
+
+
+def test_package_failure_preserves_existing_outputs(tmp_path, fake_genanki, monkeypatch) -> None:
+    cards, expressions, media = write_inputs(tmp_path)
+    destination = tmp_path / "lesson.apkg"
+    manifest = tmp_path / "manifest.json"
+    destination.write_bytes(b"existing")
+    manifest.write_text('{"existing": true}', encoding="utf-8")
+    monkeypatch.setattr(FakePackage, "write_to_file", lambda *args: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(AnkiExportError, match="boom"):
+        build_anki_deck(cards, expressions, media, destination, manifest)
+    assert destination.read_bytes() == b"existing"
+    assert json.loads(manifest.read_text(encoding="utf-8")) == {"existing": True}

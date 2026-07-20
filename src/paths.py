@@ -22,6 +22,8 @@ class ResultPaths:
     target_expressions_diagnostic_json: Path
     card_media_json: Path
     media_directory: Path
+    anki_deck: Path
+    anki_export_manifest_json: Path
 
 
 def build_result_paths(video: Path, output_root: Path = Path("output")) -> ResultPaths:
@@ -43,4 +45,6 @@ def build_result_paths(video: Path, output_root: Path = Path("output")) -> Resul
         target_expressions_diagnostic_json=directory / "target_expressions_diagnostic.json",
         card_media_json=directory / "card_media.json",
         media_directory=directory / "media",
+        anki_deck=directory / f"{video.stem}.apkg",
+        anki_export_manifest_json=directory / "anki_export_manifest.json",
     )

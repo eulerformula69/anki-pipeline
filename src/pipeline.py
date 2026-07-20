@@ -8,6 +8,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from src.anki_export import AnkiExportError, build_anki_deck
     from src.cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
     from src.frame_extraction import FrameExtractionError, extract_card_images
     from src.knowledge import KnowledgeExtractionError, extract_knowledge
@@ -20,6 +21,7 @@ if __package__ in (None, ""):
     from src.target_expressions import TargetExpressionError, extract_target_expressions
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
+    from .anki_export import AnkiExportError, build_anki_deck
     from .cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
     from .frame_extraction import FrameExtractionError, extract_card_images
     from .knowledge import KnowledgeExtractionError, extract_knowledge
@@ -64,14 +66,32 @@ def run_pipeline(
     extract_card_images_stage: bool = False,
     frames_per_card: int = 5,
     image_policy: str = "auto",
+    build_anki_deck_stage: bool = False,
+    deck_name: str | None = None,
 ) -> Path:
     paths = build_result_paths(video)
-    if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions, extract_card_images_stage)) > 1:
+    if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions, extract_card_images_stage, build_anki_deck_stage)) > 1:
         raise ValueError(
             "Используйте только один из флагов --extract-knowledge, "
             "--review-knowledge, --extract-target-expressions или "
-            "--generate-card-candidates или --extract-card-images за запуск."
+            "--generate-card-candidates, --extract-card-images или --build-anki-deck за запуск."
         )
+
+    if build_anki_deck_stage:
+        if paths.anki_deck.exists() and paths.anki_export_manifest_json.exists() and not force:
+            LOGGER.info("Колода Anki уже существует: %s", paths.anki_deck)
+            return paths.anki_deck
+        if not paths.card_candidates_json.exists():
+            raise AnkiExportError(
+                "Не найден card_candidates.json. Сначала выполните --generate-card-candidates."
+            )
+        build_anki_deck(
+            paths.card_candidates_json, paths.target_expressions_json,
+            paths.card_media_json, paths.anki_deck,
+            paths.anki_export_manifest_json, deck_name=deck_name,
+        )
+        LOGGER.info("Колода Anki: %s", paths.anki_deck)
+        return paths.anki_deck
 
     if extract_card_images_stage:
         if paths.card_media_json.exists() and not force:
@@ -341,6 +361,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--image-policy", choices=("auto", "always", "never"), default="auto",
         help="Политика выбора изображения (default: auto)",
     )
+    parser.add_argument(
+        "--build-anki-deck", action="store_true",
+        help="Собрать готовую локальную колоду .apkg",
+    )
+    parser.add_argument(
+        "--deck-name", help="Имя колоды Anki; по умолчанию имя исходного видео",
+    )
     return parser
 
 
@@ -372,6 +399,8 @@ def main(argv: list[str] | None = None) -> int:
             extract_card_images_stage=args.extract_card_images,
             frames_per_card=args.frames_per_card,
             image_policy=args.image_policy,
+            build_anki_deck_stage=args.build_anki_deck,
+            deck_name=args.deck_name,
         )
     except (
         FileNotFoundError,
@@ -385,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
         CardGenerationError,
         TargetExpressionError,
         FrameExtractionError,
+        AnkiExportError,
     ) as exc:
         LOGGER.error("%s", exc)
         return 1

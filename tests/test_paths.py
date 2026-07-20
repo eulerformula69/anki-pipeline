@@ -18,3 +18,7 @@ def test_build_result_paths() -> None:
     assert paths.card_candidates_json == Path("results/lesson/card_candidates.json")
     assert paths.card_media_json == Path("results/lesson/card_media.json")
     assert paths.media_directory == Path("results/lesson/media")
+    assert paths.anki_deck == Path("results/lesson/lesson.apkg")
+    assert paths.anki_export_manifest_json == Path(
+        "results/lesson/anki_export_manifest.json"
+    )

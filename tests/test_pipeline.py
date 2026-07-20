@@ -165,3 +165,25 @@ def test_card_images_are_independent_and_reused(tmp_path, monkeypatch) -> None:
     called.clear()
     assert run_pipeline(video, extract_card_images_stage=True) == result_dir / "card_media.json"
     assert not called
+
+
+def test_anki_export_is_independent_and_reused(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    result_dir = Path("output/video")
+    result_dir.mkdir(parents=True)
+    (result_dir / "card_candidates.json").write_text("{}", encoding="utf-8")
+    called = []
+    monkeypatch.setattr("src.pipeline.build_anki_deck", lambda *a, **k: called.append((a, k)))
+    forbidden = lambda *a, **k: pytest.fail("Предыдущий этап не должен запускаться")
+    monkeypatch.setattr("src.pipeline.ensure_ffmpeg", forbidden)
+    monkeypatch.setattr("src.pipeline.transcribe_audio", forbidden)
+    destination = result_dir / "video.apkg"
+    assert run_pipeline(
+        Path("input/video.mkv"), build_anki_deck_stage=True, deck_name="Course"
+    ) == destination
+    assert called[0][1] == {"deck_name": "Course"}
+    destination.write_bytes(b"apkg")
+    (result_dir / "anki_export_manifest.json").write_text("{}", encoding="utf-8")
+    called.clear()
+    assert run_pipeline(Path("input/video.mkv"), build_anki_deck_stage=True) == destination
+    assert not called

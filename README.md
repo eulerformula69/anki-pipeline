@@ -1,5 +1,31 @@
 # anki-pipeline
 
+## Готовая колода Anki
+
+После создания кандидатов и необязательного подбора изображений соберите
+импортируемую `.apkg` одной независимой командой:
+
+```powershell
+python -m src.pipeline "input/video.mkv" `
+  --build-anki-deck `
+  --deck-name "Название курса"
+```
+
+Команда читает `card_candidates.json`, а при наличии также
+`target_expressions.json` и `card_media.json`. Она не запускает Whisper, FFmpeg
+или Ollama. Готовые файлы:
+
+```text
+output/<video>/<video>.apkg
+output/<video>/anki_export_manifest.json
+```
+
+Manifest хранит стабильные GUID, связи с card/knowledge/expression IDs и имена
+медиа. В колоду автоматически включаются только выражения `verified`; отсутствие
+выражений или изображения не мешает экспорту. Повторный запуск без `--force`
+использует готовую колоду, а стабильные GUID позволяют обновлять заметки при
+повторном импорте в Anki.
+
 ## Кадры для карточек
 
 Независимый локальный этап читает готовые `transcript.json` и
