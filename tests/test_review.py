@@ -79,11 +79,27 @@ def test_five_point_confidence_is_normalized() -> None:
     assert result[0].confidence == 1.0
 
 
-def test_items_are_grouped_globally_for_cross_segment_deduplication() -> None:
+def test_small_collection_stays_in_one_review_group() -> None:
     groups = group_knowledge_items(items())
 
     assert [[item.id for item in group] for group in groups] == [
         ["k_0001", "k_0002", "k_0003"],
+    ]
+
+
+def test_large_collection_is_split_below_common_response_limit() -> None:
+    many_items = [
+        KnowledgeItem(
+            f"k_{index:04d}", 0, "fact", f"Fact {index}.", "", 3, [index], "Evidence."
+        )
+        for index in range(1, 41)
+    ]
+
+    groups = group_knowledge_items(many_items)
+
+    assert [len(group) for group in groups] == [12, 12, 12, 4]
+    assert [item.id for group in groups for item in group] == [
+        item.id for item in many_items
     ]
 
 

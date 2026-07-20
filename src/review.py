@@ -144,7 +144,7 @@ def load_knowledge_items(path: Path) -> tuple[str, str, list[KnowledgeItem]]:
 
 
 def group_knowledge_items(
-    items: list[KnowledgeItem], *, max_group_size: int = 40
+    items: list[KnowledgeItem], *, max_group_size: int = 12
 ) -> list[list[KnowledgeItem]]:
     if max_group_size < 1:
         raise ValueError("max_group_size должен быть положительным.")
