@@ -21,11 +21,40 @@ def _now() -> str:
 
 
 class JobManager:
-    def __init__(self, runner: PipelineRunner | None = None) -> None:
+    def __init__(
+        self,
+        runner: PipelineRunner | None = None,
+        *,
+        output_root: Path = Path("output"),
+    ) -> None:
         self.runner = runner or PipelineRunner()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="anki-gui")
         self.jobs: dict[str, JobState] = {}
         self._lock = threading.RLock()
+        self.output_root = output_root.resolve()
+        self.restore()
+
+    def restore(self) -> None:
+        if not self.output_root.exists():
+            return
+        for path in self.output_root.glob("*/gui_job.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                state = JobState(**data)
+                output = Path(state.output_directory).resolve()
+                if output != path.parent.resolve() or not output.is_relative_to(self.output_root):
+                    continue
+                if state.status in {"queued", "running", "exporting"}:
+                    state.status = "failed"
+                    state.error = "Приложение было перезапущено во время выполнения задачи. Запустите нужные стадии повторно."
+                    state.progress_message = "Задача прервана перезапуском приложения"
+                    state.finished_at = _now()
+                    atomic_json(asdict(state), path)
+                self.jobs[state.job_id] = state
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                logging.getLogger("anki_pipeline.gui").warning(
+                    "Пропущено некорректное состояние job: %s", path
+                )
 
     def submit(self, request: PipelineRunRequest) -> JobState:
         paths = build_result_paths(request.video_path)

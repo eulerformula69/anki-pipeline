@@ -291,6 +291,17 @@ def extract_target_expressions(
             except OllamaError:
                 raise
             if attempt == 1:
+                if error and all(
+                    "письменность" in part
+                    for part in error.split(" | ")
+                ):
+                    LOGGER.warning(
+                        "Окно %d/%d не содержит валидных выражений %s; пропущено.",
+                        window_number,
+                        len(windows),
+                        target_language,
+                    )
+                    break
                 save_json_atomic({
                     "window": window_number, "error": error,
                     "ollama_responses": responses, "model": client.model,

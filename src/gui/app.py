@@ -14,7 +14,7 @@ def create_app(*, root: Path | None = None, manager: JobManager | None = None) -
     package = Path(__file__).parent
     app = FastAPI(title="anki-pipeline", docs_url=None, redoc_url=None)
     app.state.root = (root or Path.cwd()).resolve()
-    app.state.jobs = manager or JobManager()
+    app.state.jobs = manager or JobManager(output_root=app.state.root / "output")
     app.state.reviews = ReviewStore()
     app.mount("/static", StaticFiles(directory=package / "static"), name="static")
     app.include_router(router)

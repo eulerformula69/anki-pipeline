@@ -132,6 +132,32 @@ def test_extraction_retries_without_overwriting_existing_result(tmp_path) -> Non
     assert json.loads(destination.read_text(encoding="utf-8"))["target_language"] == "ja"
 
 
+def test_extraction_skips_window_with_only_non_native_hallucinations(tmp_path) -> None:
+    knowledge = tmp_path / "knowledge.json"
+    knowledge.write_text(json.dumps({
+        "source": "video.mkv", "model": "qwen3:8b",
+        "knowledge_items": [item().to_dict()],
+    }), encoding="utf-8")
+    transcript = tmp_path / "transcript.json"
+    transcript.write_text(json.dumps({"segments": [
+        {"id": 3, "start": 1.0, "end": 2.0, "text": "Class dismissed."},
+    ]}), encoding="utf-8")
+    invalid = valid_response()
+    invalid["expressions"][0].update(
+        surface="Class dismissed", reading="クラスディスミッスド"
+    )
+    client = Client([(invalid, "first"), (invalid, "second")])
+
+    result = extract_target_expressions(
+        transcript, knowledge, tmp_path / "expressions.json",
+        tmp_path / "diagnostic.json", client, target_language="ja",
+    )
+
+    assert result.expressions == []
+    assert client.calls == 2
+    assert not (tmp_path / "diagnostic.json").exists()
+
+
 def test_expression_id_is_stable_and_content_specific() -> None:
     first = stable_expression_id("ja", "term", "だって")
 
