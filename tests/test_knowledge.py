@@ -96,9 +96,10 @@ def test_id_from_another_semantic_segment() -> None:
         parse(valid_item(source_transcript_segment_ids=[2]))
 
 
-def test_unordered_ids() -> None:
-    with pytest.raises(KnowledgeExtractionError, match="упорядоченными"):
-        parse(valid_item(source_transcript_segment_ids=[1, 0]))
+def test_unordered_and_duplicate_ids_are_canonicalized() -> None:
+    proposals = parse(valid_item(source_transcript_segment_ids=[1, 0, 1]))
+
+    assert proposals[0].source_transcript_segment_ids == [0, 1]
 
 
 def test_ordered_non_adjacent_ids_are_allowed() -> None:

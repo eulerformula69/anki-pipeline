@@ -220,8 +220,15 @@ def parse_knowledge_response(
         if not valid_ids:
             errors.append(prefix + "source IDs должны быть непустым массивом целых чисел.")
         else:
-            if source_ids != sorted(set(source_ids)):
-                errors.append(prefix + "source IDs должны быть уникальными и упорядоченными.")
+            normalized_source_ids = sorted(set(source_ids))
+            if source_ids != normalized_source_ids:
+                LOGGER.warning(
+                    "Item %d: source IDs нормализованы: %s -> %s",
+                    index + 1,
+                    source_ids,
+                    normalized_source_ids,
+                )
+            source_ids = normalized_source_ids
             missing = [item for item in source_ids if item not in transcript_by_id]
             outside = [item for item in source_ids if item not in allowed_set]
             if missing:
