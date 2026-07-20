@@ -449,14 +449,24 @@ def localize_existing_candidates(cards_path: Path, expressions_path: Path) -> in
     by_id = {item.id: item for item in verified}
     localized: list[CardCandidate] = []
     for candidate in candidates:
-        linked = [
-            by_id[item_id] for item_id in (candidate.expression_ids or [])
-            if item_id in by_id
-        ]
+        source_ids = set(candidate.source_transcript_segment_ids)
+        linked_by_id = {
+            item.id: item
+            for item in verified
+            if item.id in (candidate.expression_ids or [])
+            or bool(source_ids & set(item.source_transcript_segment_ids))
+        }
+        linked = list(linked_by_id.values())
         front, back, extra = localize_card_text(
             candidate.front, candidate.back, candidate.extra, linked, verified
         )
-        localized.append(replace(candidate, front=front, back=back, extra=extra))
+        localized.append(replace(
+            candidate,
+            front=front,
+            back=back,
+            extra=extra,
+            expression_ids=list(linked_by_id),
+        ))
     save_json_atomic(
         {**data, "card_candidates": [item.__dict__ for item in localized]}, cards_path
     )

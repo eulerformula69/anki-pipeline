@@ -215,7 +215,7 @@ def parse_response(
 
 
 def _normalize_native(text: str) -> str:
-    return re.sub(r"[\s、。,.!?！？'\"「」『』（）()]+", "", text).casefold()
+    return re.sub(r"[\s、。,.!?！？'\"「」『』（）()~〜～]+", "", text).casefold()
 
 
 def stable_expression_id(language: str, expression_type: str, surface: str) -> str:

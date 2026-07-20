@@ -9,6 +9,7 @@ from src.target_expressions import (
     load_glossary,
     parse_response,
     recover_partial_expressions,
+    _normalize_native,
     stable_expression_id,
 )
 from src.ollama_schemas import target_expression_response_schema
@@ -178,3 +179,7 @@ def test_complete_expressions_are_recovered_from_truncated_json() -> None:
     recovered = recover_partial_expressions(raw)
 
     assert recovered == {"expressions": [complete]}
+
+
+def test_wave_dash_does_not_block_native_evidence_match() -> None:
+    assert _normalize_native("〜らしい") == _normalize_native("らしい")

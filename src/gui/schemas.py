@@ -6,7 +6,7 @@ from pathlib import Path
 
 STAGES = (
     "transcription", "semantic_segmentation", "knowledge_extraction",
-    "knowledge_review", "target_expressions", "target_transcription",
+    "target_expressions", "target_transcription", "knowledge_review",
     "card_generation", "frame_extraction",
 )
 
