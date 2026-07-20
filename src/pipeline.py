@@ -14,7 +14,7 @@ if __package__ in (None, ""):
     from src.frame_extraction import FrameExtractionError, extract_card_images
     from src.knowledge import KnowledgeExtractionError, extract_knowledge
     from src.output import save_transcript_json, save_transcript_text
-    from src.config import LLMConfig
+    from src.config import LLMConfig, load_local_env
     from src.llm import LLMError
     from src.llm_factory import create_llm_provider
     from src.paths import build_result_paths
@@ -30,7 +30,7 @@ else:
     from .frame_extraction import FrameExtractionError, extract_card_images
     from .knowledge import KnowledgeExtractionError, extract_knowledge
     from .output import save_transcript_json, save_transcript_text
-    from .config import LLMConfig
+    from .config import LLMConfig, load_local_env
     from .llm import LLMError
     from .llm_factory import create_llm_provider
     from .paths import build_result_paths
@@ -460,6 +460,11 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+    try:
+        load_local_env()
+    except ValueError as exc:
+        LOGGER.error("%s", exc)
+        return 1
     args = build_parser().parse_args(argv)
     try:
         run_pipeline(
