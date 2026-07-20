@@ -306,6 +306,26 @@ def media(request: Request, job_id: str, card_id: str):
     return FileResponse(path)
 
 
+@router.get("/jobs/{job_id}/review/cards/{card_id}/image-candidates/{candidate_index}")
+def candidate_image(
+    request: Request, job_id: str, card_id: str, candidate_index: int
+):
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    manifest = output / "media_candidates" / card_id / "candidates.json"
+    try:
+        candidates = json.loads(manifest.read_text(encoding="utf-8"))["candidates"]
+        candidate = candidates[candidate_index]
+        relative = Path(candidate["path"])
+    except (OSError, json.JSONDecodeError, KeyError, IndexError, TypeError):
+        raise HTTPException(404, "Кадр не найден.")
+    expected = (output / "media_candidates" / card_id).resolve()
+    path = (output / relative).resolve()
+    if relative.is_absolute() or not path.is_relative_to(expected) or not path.is_file():
+        raise HTTPException(404, "Кадр не найден.")
+    return FileResponse(path)
+
+
 @router.get("/jobs/{job_id}/video")
 def video(request: Request, job_id: str):
     state = _job(request, job_id)
