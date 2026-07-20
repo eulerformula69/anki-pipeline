@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import re
+from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,13 +29,30 @@ class TargetExpressionError(RuntimeError):
     pass
 
 
-def build_prompt(segments: list[TranscriptSegment], language: str, correction: str = "") -> str:
-    payload = [segment.__dict__ for segment in segments]
+def build_prompt(
+    segments: list[TranscriptSegment], language: str, correction: str = "",
+    native_evidence: dict[int, list[str]] | None = None,
+) -> str:
+    window_ids = {segment.id for segment in segments}
+    target_groups: dict[str, list[int]] = {}
+    for source_id in window_ids:
+        for text in (native_evidence or {}).get(source_id, []):
+            target_groups.setdefault(text, []).append(source_id)
+    payload = {
+        "primary_segments": [segment.__dict__ for segment in segments],
+        "target_language_segments": [
+            {"text": text, "source_transcript_segment_ids": sorted(set(source_ids))}
+            for text, source_ids in target_groups.items()
+        ],
+    }
     return f"""Extract the useful target-language material from this mixed-language transcript.
 Target language code: {language}.
 Return isolated words, grammar constructions, and complete example sentences.
 type must be term, grammar_pattern, or example_sentence.
 The transcript may contain inaccurate romanization. Reconstruct native writing cautiously.
+target_language_transcript is a noisy second Whisper pass over the same audio interval.
+Use its native spelling only when it phonetically agrees with romanized target-language
+speech in the primary text. Never extract an expression from the second pass alone.
 The explanations may be in another language. Use that language in meaning.
 surface must use the target language's native writing system (for Japanese: kana/kanji).
 reading is the native pronunciation aid (for Japanese: kana). romanization is Latin script.
@@ -67,6 +86,8 @@ def parse_response(
     data: dict[str, Any], items: list, language: str,
     glossary: dict[str, dict[str, str]] | None = None,
     allowed_source_ids: set[int] | None = None,
+    native_evidence: dict[int, list[str]] | None = None,
+    primary_evidence: dict[int, str] | None = None,
 ) -> list[TargetExpression]:
     raw_items = data.get("expressions")
     if set(data) != {"expressions"} or not isinstance(raw_items, list):
@@ -133,6 +154,19 @@ def parse_response(
         if key in seen:
             continue
         seen.add(key)
+        evidence_text = " ".join(
+            text for source_id in source_ids
+            for text in (native_evidence or {}).get(source_id, [])
+        )
+        transcribed = (
+            bool(evidence_text)
+            and _normalize_native(raw["surface"]) in _normalize_native(evidence_text)
+            and romanization_matches_primary(
+                raw["romanization"], " ".join(
+                    (primary_evidence or {}).get(source_id, "") for source_id in source_ids
+                )
+            )
+        )
         result.append(TargetExpression(
             id=f"e_{len(result) + 1:04d}", language=language,
             surface=raw["surface"].strip(), reading=raw["reading"].strip(),
@@ -142,7 +176,11 @@ def parse_response(
                 if set(item.source_transcript_segment_ids) & set(source_ids)
             ],
             source_transcript_segment_ids=sorted(set(source_ids)),
-            verification="verified" if glossary_entry else "needs_review",
+            verification=(
+                "verified" if glossary_entry
+                else "transcribed" if transcribed
+                else "needs_review"
+            ),
             confidence=float(confidence),
             type=expression_type,
         ))
@@ -155,10 +193,56 @@ def parse_response(
     return result
 
 
+def _normalize_native(text: str) -> str:
+    return re.sub(r"[\s、。,.!?！？'\"「」『』（）()]+", "", text).casefold()
+
+
+def stable_expression_id(language: str, expression_type: str, surface: str) -> str:
+    key = f"{language}\0{expression_type}\0{_normalize_native(surface)}".encode("utf-8")
+    return "e_" + hashlib.blake2s(key, digest_size=6).hexdigest()
+
+
+def romanization_matches_primary(romanization: str, primary: str) -> bool:
+    roman_tokens = re.findall(r"[a-z]+", romanization.casefold())
+    primary_tokens = re.findall(r"[a-z]+", primary.casefold())
+    if not roman_tokens or not primary_tokens:
+        return False
+    needle = "".join(roman_tokens)
+    if any(
+        primary_tokens[start:start + len(roman_tokens)] == roman_tokens
+        for start in range(0, len(primary_tokens) - len(roman_tokens) + 1)
+    ):
+        return True
+    minimum = max(1, len(roman_tokens) - 1)
+    maximum = min(len(primary_tokens), len(roman_tokens) + 1)
+    return any(
+        SequenceMatcher(None, needle, "".join(primary_tokens[start:start + size])).ratio()
+        >= 0.82
+        for size in range(minimum, maximum + 1)
+        for start in range(0, len(primary_tokens) - size + 1)
+    )
+
+
+def load_native_evidence(path: Path | None) -> dict[int, list[str]]:
+    if path is None or not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        evidence: dict[int, list[str]] = {}
+        for segment in data["segments"]:
+            text = str(segment["text"]).strip()
+            for source_id in segment["source_transcript_segment_ids"]:
+                evidence.setdefault(int(source_id), []).append(text)
+        return evidence
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise TargetExpressionError(f"Не удалось прочитать target_transcript.json: {exc}") from exc
+
+
 def extract_target_expressions(
     transcript_path: Path, knowledge_path: Path, destination: Path, diagnostic_path: Path,
     client: OllamaClient, *, target_language: str,
     glossary_path: Path | None = None,
+    target_transcript_path: Path | None = None,
 ) -> TargetExpressionCollection:
     if isinstance(client, OllamaClient):
         client.format_schema = SCHEMA
@@ -170,6 +254,8 @@ def extract_target_expressions(
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise TargetExpressionError(f"Не удалось прочитать transcript.json: {exc}") from exc
     glossary = load_glossary(glossary_path)
+    native_evidence = load_native_evidence(target_transcript_path)
+    primary_evidence = {segment.id: segment.text for segment in transcript_segments}
     all_expressions: list[TargetExpression] = []
     window_size, overlap = 12, 2
     starts = range(0, len(transcript_segments), window_size - overlap)
@@ -186,11 +272,15 @@ def extract_target_expressions(
             try:
                 label = f"Ollama Expressions: окно {window_number}/{len(windows)}"
                 with ActivityIndicator(label + (" (retry)" if attempt else "")):
-                    data, raw = client.generate_json(build_prompt(window, target_language, correction))
+                    data, raw = client.generate_json(build_prompt(
+                        window, target_language, correction, native_evidence
+                    ))
                 responses.append(raw)
                 all_expressions.extend(parse_response(
                     data, items, target_language, glossary,
                     {segment.id for segment in window},
+                    native_evidence,
+                    primary_evidence,
                 ))
                 break
             except OllamaInvalidResponseError as exc:
@@ -223,8 +313,11 @@ def extract_target_expressions(
                    "confidence": max(previous.confidence, expression.confidence)}
             )
     expressions = [
-        TargetExpression(**{**item.__dict__, "id": f"e_{index:04d}"})
-        for index, item in enumerate(merged.values(), start=1)
+        TargetExpression(**{
+            **item.__dict__,
+            "id": stable_expression_id(item.language, item.type, item.surface),
+        })
+        for item in merged.values()
     ]
     result = TargetExpressionCollection(source, client.model, target_language, expressions)
     save_json_atomic(result.to_dict(), destination)

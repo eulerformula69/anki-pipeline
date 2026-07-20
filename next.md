@@ -1,6 +1,6 @@
 # anki-pipeline: текущее состояние и дальнейшее развитие
 
-Дата фиксации: 19 июля 2026 года.
+Дата обновления: 20 июля 2026 года.
 
 ## Цель проекта
 
@@ -20,6 +20,8 @@ video
   -> knowledge_items.json
   -> knowledge_review.json
   -> target_expressions.json
+  -> target_transcript.json (необязательный второй языковой проход)
+  -> уточнённый target_expressions.json
   -> card_candidates.json
   -> card_media.json + media/*.jpg
 ```
@@ -35,7 +37,8 @@ video
 - извлечение слов, грамматических конструкций и полных предложений изучаемого языка;
 - хранение оригинального написания, чтения, романизации и перевода отдельно от
   исходного транскрипта;
-- статусы `verified` и `needs_review` для языкового материала;
+- статусы `verified`, `transcribed` и `needs_review` для языкового материала;
+- выборочный второй Whisper-проход только по интервалам изучаемого языка;
 - локальные глоссарии `glossaries/<language>.json`;
 - замена подтверждённой романизации оригинальным написанием в `front` и `back`;
 - повторное использование результатов и точечная перезапись через `--force`;
@@ -45,10 +48,10 @@ video
 
 Текущая модель Ollama: `qwen3:8b`. Модель Whisper по умолчанию: `small`.
 
-На контрольном японском видео текущий результат содержит 54 языковых объекта:
-17 терминов, 17 грамматических конструкций и 20 предложений. Автоматически в
-карточки допускаются только подтверждённые выражения. Последний тестовый прогон:
-94 теста успешно.
+Второй проход проверен на контрольном японском видео: 17 выбранных аудиофрагментов
+обработаны моделью `small` на CUDA примерно за 80 секунд. Смешанная речь остаётся
+шумным источником, поэтому результат принимается только при совпадении нативного
+текста и романизации на одном таймкоде. Последний тестовый прогон: 101 тест успешно.
 
 ## Команды текущего полного цикла
 
@@ -57,6 +60,8 @@ py -m src.pipeline "input/video.mkv" --language en --device cuda --semantic-segm
 py -m src.pipeline "input/video.mkv" --extract-knowledge
 py -m src.pipeline "input/video.mkv" --review-knowledge
 py -m src.pipeline "input/video.mkv" --extract-target-expressions --target-language ja
+py -m src.pipeline "input/video.mkv" --transcribe-target --target-language ja --target-device cuda
+py -m src.pipeline "input/video.mkv" --extract-target-expressions --target-language ja --force
 py -m src.pipeline "input/video.mkv" --generate-card-candidates
 py -m src.pipeline "input/video.mkv" --extract-card-images
 py -m src.pipeline "input/video.mkv" --build-anki-deck
@@ -77,6 +82,8 @@ py -m src.pipeline "input/video.mkv" --build-anki-deck
 - `knowledge_review.json` — решения keep, discard, merge и split.
 - `target_expressions.json` — отдельный языковой слой. Содержит `term`,
   `grammar_pattern` и `example_sentence`.
+- `target_transcript.json` — нативная альтернативная транскрипция только выбранных
+  аудиоинтервалов с сохранёнными исходными transcript segment IDs.
 - `card_candidates.json` — проверенные текстовые кандидаты, но ещё не готовая
   колода Anki.
 
@@ -91,8 +98,8 @@ py -m src.pipeline "input/video.mkv" --build-anki-deck
   Поэтому непроверенные формы остаются `needs_review` и не попадают в карточки.
 - Романизация может оставаться в английском пояснении, если для неё нет
   подтверждённой записи в локальном глоссарии.
-- `card_candidates.json` пока не является `.apkg` и не импортируется в Anki.
-- Изображения из видео пока не извлекаются.
+- Второй Whisper-проход также ошибается на смешанной речи и не считается безусловной
+  истиной; требуется фонетическое совпадение с основной транскрипцией.
 - Git remote не настроен, поэтому локальные коммиты создать можно, а push — нет.
 
 ## Этап 1: изображения из видео — базовый media layer реализован

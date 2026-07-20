@@ -156,6 +156,28 @@ class TargetExpressionCollection:
 
 
 @dataclass(frozen=True)
+class TargetTranscriptSegment:
+    id: int
+    start: float
+    end: float
+    text: str
+    source_transcript_segment_ids: list[int]
+    language_probability: float
+
+
+@dataclass(frozen=True)
+class TargetTranscript:
+    source: str
+    language: str
+    duration_seconds: float
+    model: str
+    segments: list[TargetTranscriptSegment]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class FrameMetrics:
     brightness_mean: float
     dark_ratio: float

@@ -413,7 +413,7 @@ def generate_card_candidates(
     verified_expressions: list = []
     if expressions_path and expressions_path.exists():
         for expression in load_target_expressions(expressions_path):
-            if expression.verification != "verified":
+            if expression.verification not in {"verified", "transcribed"}:
                 continue
             verified_expressions.append(expression)
             for knowledge_id in expression.knowledge_ids:
@@ -440,7 +440,7 @@ def localize_existing_candidates(cards_path: Path, expressions_path: Path) -> in
         raise CardGenerationError(f"Не удалось прочитать card_candidates.json: {exc}") from exc
     verified = [
         item for item in load_target_expressions(expressions_path)
-        if item.verification == "verified"
+        if item.verification in {"verified", "transcribed"}
     ]
     by_id = {item.id: item for item in verified}
     localized: list[CardCandidate] = []

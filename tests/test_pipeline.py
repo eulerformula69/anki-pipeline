@@ -187,3 +187,32 @@ def test_anki_export_is_independent_and_reused(tmp_path, monkeypatch) -> None:
     called.clear()
     assert run_pipeline(Path("input/video.mkv"), build_anki_deck_stage=True) == destination
     assert not called
+
+
+def test_target_transcription_is_independent_and_reused(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    result_dir = Path("output/video")
+    result_dir.mkdir(parents=True)
+    (result_dir / "audio.wav").write_bytes(b"wav")
+    (result_dir / "transcript.json").write_text("{}", encoding="utf-8")
+    (result_dir / "target_expressions.json").write_text("{}", encoding="utf-8")
+    called = []
+    monkeypatch.setattr(
+        "src.pipeline.transcribe_target_ranges", lambda *a, **k: called.append((a, k))
+    )
+
+    destination = run_pipeline(
+        Path("input/video.mkv"), transcribe_target_stage=True,
+        target_language="ja", target_whisper_model="medium", target_device="cpu",
+    )
+
+    assert destination == result_dir / "target_transcript.json"
+    assert called[0][1]["language"] == "ja"
+    assert called[0][1]["model_name"] == "medium"
+    assert called[0][1]["device"] == "cpu"
+    (result_dir / "target_transcript.json").write_text("{}", encoding="utf-8")
+    called.clear()
+    assert run_pipeline(
+        Path("input/video.mkv"), transcribe_target_stage=True
+    ) == result_dir / "target_transcript.json"
+    assert not called

@@ -8,6 +8,7 @@ from src.target_expressions import (
     extract_target_expressions,
     load_glossary,
     parse_response,
+    stable_expression_id,
 )
 
 
@@ -76,6 +77,24 @@ def test_glossary_replaces_romaji_and_verifies_expression(tmp_path) -> None:
     assert result[0].verification == "verified"
 
 
+def test_second_pass_native_evidence_marks_expression_transcribed() -> None:
+    result = parse_response(
+        valid_response(), [item()], "ja", native_evidence={3: ["だって。"]},
+        primary_evidence={3: "The particle datte is used here."},
+    )
+
+    assert result[0].verification == "transcribed"
+
+
+def test_second_pass_without_primary_phonetic_match_is_not_trusted() -> None:
+    result = parse_response(
+        valid_response(), [item()], "ja", native_evidence={3: ["だって。"]},
+        primary_evidence={3: "This is an unrelated English explanation."},
+    )
+
+    assert result[0].verification == "needs_review"
+
+
 class Client:
     model = "qwen3:8b"
 
@@ -109,5 +128,12 @@ def test_extraction_retries_without_overwriting_existing_result(tmp_path) -> Non
     )
 
     assert client.calls == 2
-    assert result.expressions[0].id == "e_0001"
+    assert result.expressions[0].id == stable_expression_id("ja", "term", "だって")
     assert json.loads(destination.read_text(encoding="utf-8"))["target_language"] == "ja"
+
+
+def test_expression_id_is_stable_and_content_specific() -> None:
+    first = stable_expression_id("ja", "term", "だって")
+
+    assert first == stable_expression_id("ja", "term", "だって。")
+    assert first != stable_expression_id("ja", "example_sentence", "だって")

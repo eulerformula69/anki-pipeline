@@ -20,6 +20,8 @@ class ResultPaths:
     cards_diagnostic_json: Path
     target_expressions_json: Path
     target_expressions_diagnostic_json: Path
+    target_transcript_json: Path
+    target_audio_directory: Path
     card_media_json: Path
     media_directory: Path
     anki_deck: Path
@@ -43,6 +45,8 @@ def build_result_paths(video: Path, output_root: Path = Path("output")) -> Resul
         cards_diagnostic_json=directory / "card_candidates_diagnostic.json",
         target_expressions_json=directory / "target_expressions.json",
         target_expressions_diagnostic_json=directory / "target_expressions_diagnostic.json",
+        target_transcript_json=directory / "target_transcript.json",
+        target_audio_directory=directory / "target_audio",
         card_media_json=directory / "card_media.json",
         media_directory=directory / "media",
         anki_deck=directory / f"{video.stem}.apkg",

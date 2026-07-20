@@ -19,6 +19,7 @@ if __package__ in (None, ""):
     from src.semantic import SemanticSegmentationError, semantic_segment_transcript
     from src.transcription import TranscriptionError, resolve_device, transcribe_audio
     from src.target_expressions import TargetExpressionError, extract_target_expressions
+    from src.target_transcription import TargetTranscriptionError, transcribe_target_ranges
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from .anki_export import AnkiExportError, build_anki_deck
@@ -32,6 +33,7 @@ else:
     from .semantic import SemanticSegmentationError, semantic_segment_transcript
     from .transcription import TranscriptionError, resolve_device, transcribe_audio
     from .target_expressions import TargetExpressionError, extract_target_expressions
+    from .target_transcription import TargetTranscriptionError, transcribe_target_ranges
 
 LOGGER = logging.getLogger("anki_pipeline")
 
@@ -68,14 +70,53 @@ def run_pipeline(
     image_policy: str = "auto",
     build_anki_deck_stage: bool = False,
     deck_name: str | None = None,
+    transcribe_target_stage: bool = False,
+    target_whisper_model: str = "small",
+    target_device: str = "auto",
+    target_padding: float = 0.35,
 ) -> Path:
     paths = build_result_paths(video)
-    if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions, extract_card_images_stage, build_anki_deck_stage)) > 1:
+    if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions, extract_card_images_stage, build_anki_deck_stage, transcribe_target_stage)) > 1:
         raise ValueError(
             "Используйте только один из флагов --extract-knowledge, "
             "--review-knowledge, --extract-target-expressions или "
-            "--generate-card-candidates, --extract-card-images или --build-anki-deck за запуск."
+            "--generate-card-candidates, --transcribe-target, --extract-card-images "
+            "или --build-anki-deck за запуск."
         )
+
+    if transcribe_target_stage:
+        if paths.target_transcript_json.exists() and not force:
+            LOGGER.info("Вторичная транскрипция уже существует: %s", paths.target_transcript_json)
+            return paths.target_transcript_json
+        if not paths.transcript_json.exists():
+            raise TargetTranscriptionError(
+                "Не найден transcript.json. Сначала запустите основную транскрипцию."
+            )
+        if not paths.target_expressions_json.exists():
+            raise TargetTranscriptionError(
+                "Не найден target_expressions.json. Сначала выполните черновое "
+                "--extract-target-expressions."
+            )
+        if not paths.audio.exists():
+            if not video.exists():
+                raise TargetTranscriptionError(
+                    "Не найден audio.wav и исходное видео недоступно."
+                )
+            LOGGER.info("Извлечение mono-аудио 16 kHz: %s", paths.audio)
+            extract_audio(video, paths.audio)
+        selected_device, compute_type = resolve_device(target_device)
+        LOGGER.info(
+            "Второй проход Whisper: language=%s model=%s device=%s compute=%s",
+            target_language, target_whisper_model, selected_device, compute_type,
+        )
+        transcribe_target_ranges(
+            paths.audio, paths.transcript_json, paths.target_expressions_json,
+            paths.target_transcript_json, paths.target_audio_directory,
+            language=target_language, model_name=target_whisper_model,
+            device=target_device, padding=target_padding,
+        )
+        LOGGER.info("Вторичная транскрипция: %s", paths.target_transcript_json)
+        return paths.target_transcript_json
 
     if build_anki_deck_stage:
         if paths.anki_deck.exists() and paths.anki_export_manifest_json.exists() and not force:
@@ -131,6 +172,7 @@ def run_pipeline(
             client,
             target_language=target_language,
             glossary_path=target_glossary or Path("glossaries") / f"{target_language}.json",
+            target_transcript_path=paths.target_transcript_json,
         )
         LOGGER.info("Целевые выражения: %s", paths.target_expressions_json)
         return paths.target_expressions_json
@@ -350,6 +392,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Локальный JSON-глоссарий; по умолчанию glossaries/<language>.json",
     )
     parser.add_argument(
+        "--transcribe-target", action="store_true",
+        help="Повторно распознать только интервалы изучаемого языка",
+    )
+    parser.add_argument(
+        "--target-whisper-model", default="small",
+        help="Whisper-модель второго прохода (default: small)",
+    )
+    parser.add_argument(
+        "--target-device", choices=("auto", "cuda", "cpu"), default="auto",
+        help="Устройство второго прохода (default: auto)",
+    )
+    parser.add_argument(
+        "--target-padding", type=float, default=0.35,
+        help="Запас вокруг выбранного аудиофрагмента в секундах (default: 0.35)",
+    )
+    parser.add_argument(
         "--extract-card-images", action="store_true",
         help="Локально выбрать кадры для готовых кандидатов карточек",
     )
@@ -401,6 +459,10 @@ def main(argv: list[str] | None = None) -> int:
             image_policy=args.image_policy,
             build_anki_deck_stage=args.build_anki_deck,
             deck_name=args.deck_name,
+            transcribe_target_stage=args.transcribe_target,
+            target_whisper_model=args.target_whisper_model,
+            target_device=args.target_device,
+            target_padding=args.target_padding,
         )
     except (
         FileNotFoundError,
@@ -415,6 +477,7 @@ def main(argv: list[str] | None = None) -> int:
         TargetExpressionError,
         FrameExtractionError,
         AnkiExportError,
+        TargetTranscriptionError,
     ) as exc:
         LOGGER.error("%s", exc)
         return 1

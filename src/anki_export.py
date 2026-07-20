@@ -123,7 +123,7 @@ def load_verified_expressions(
             raise AnkiExportError(f"Некорректное выражение: {exc}") from exc
         if item.id in result:
             raise AnkiExportError(f"Повторяющийся expression ID: {item.id}.")
-        if item.verification == "verified":
+        if item.verification in {"verified", "transcribed"}:
             result[item.id] = item
     return result
 

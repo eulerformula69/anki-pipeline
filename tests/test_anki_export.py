@@ -27,7 +27,7 @@ def write_inputs(root: Path, *, with_image: bool = True) -> tuple[Path, Path, Pa
             "front": "What is A & B?", "back": "A < B", "extra": "context",
             "difficulty": 2, "importance": 4, "tags": ["definition"],
             "source_transcript_segment_ids": [1],
-            "expression_ids": ["e_verified", "e_review"],
+            "expression_ids": ["e_verified", "e_transcribed", "e_review"],
         }],
     }, ensure_ascii=False), encoding="utf-8")
     expressions.write_text(json.dumps({"source": "lesson.mkv", "expressions": [
@@ -38,6 +38,10 @@ def write_inputs(root: Path, *, with_image: bool = True) -> tuple[Path, Path, Pa
         {"id": "e_review", "language": "ja", "surface": "偽物", "reading": "にせもの",
          "romanization": "nisemono", "meaning": "unverified", "knowledge_ids": ["k_0001"],
          "source_transcript_segment_ids": [1], "verification": "needs_review", "confidence": .5,
+         "type": "term"},
+        {"id": "e_transcribed", "language": "ja", "surface": "晴れ", "reading": "はれ",
+         "romanization": "hare", "meaning": "sunny", "knowledge_ids": ["k_0001"],
+         "source_transcript_segment_ids": [1], "verification": "transcribed", "confidence": .8,
          "type": "term"},
     ]}, ensure_ascii=False), encoding="utf-8")
     image = root / "media" / "c_0001.jpg"
@@ -100,7 +104,7 @@ def test_loaders_filter_unverified_and_reject_unsafe_media(tmp_path) -> None:
     cards, expressions, media = write_inputs(tmp_path)
     source, loaded = load_card_candidates(cards)
     assert source == "lesson.mkv" and loaded[0].card_id == "c_0001"
-    assert list(load_verified_expressions(expressions)) == ["e_verified"]
+    assert list(load_verified_expressions(expressions)) == ["e_verified", "e_transcribed"]
     data = json.loads(media.read_text(encoding="utf-8"))
     data["cards"][0]["image"]["path"] = "../secret.jpg"
     media.write_text(json.dumps(data), encoding="utf-8")
@@ -124,7 +128,7 @@ def test_build_deck_escapes_html_packages_media_and_writes_manifest(tmp_path, fa
     assert Path(package.media_files[0]).name == exported[0].media
     assert note.guid == stable_guid("lesson.mkv", "c_0001")
     result = json.loads(manifest.read_text(encoding="utf-8"))
-    assert result["notes"][0]["expression_ids"] == ["e_verified"]
+    assert result["notes"][0]["expression_ids"] == ["e_verified", "e_transcribed"]
     assert result["notes"][0]["start_seconds"] == 12.5
 
 
