@@ -246,6 +246,12 @@ def parse_knowledge_response(
                     source_transcript_segment_ids=source_ids,
                 )
             )
+    if errors and proposals and all(error.startswith("Item ") for error in errors):
+        LOGGER.warning(
+            "Пропущено некорректных знаний: %d; корректные сохранены.",
+            len(errors),
+        )
+        return proposals
     if errors:
         raise KnowledgeExtractionError(" | ".join(errors))
     return proposals
@@ -405,6 +411,7 @@ def extract_knowledge(
     transcript_by_id = {segment.id: segment for segment in transcript}
     result_language = source_language if language == "source" else language
     proposals: list[KnowledgeProposal] = []
+    had_fallback = False
 
     for block_number, semantic in enumerate(semantic_segments, start=1):
         LOGGER.info(
@@ -456,10 +463,22 @@ def extract_knowledge(
                     responses=raw_responses,
                     model=client.model,
                 )
-                raise KnowledgeExtractionError(
-                    f"Ollama дважды вернул некорректные знания для блока {semantic.id}. "
-                    f"Диагностика: {diagnostic_path}"
+                LOGGER.warning(
+                    "Блок %s пропущен после двух некорректных ответов Ollama. "
+                    "Диагностика: %s",
+                    semantic.id,
+                    diagnostic_path,
                 )
+                proposals.append(KnowledgeProposal(
+                    semantic_segment_id=semantic.id,
+                    type="fact",
+                    statement=(semantic.summary or semantic.title).strip(),
+                    explanation="Automatic fallback: manually verify this knowledge.",
+                    importance=max(min_importance, 2),
+                    source_transcript_segment_ids=list(semantic.transcript_segment_ids),
+                ))
+                had_fallback = True
+                break
 
     items = [proposal_to_item(proposal, transcript_by_id) for proposal in proposals]
     items = [item for item in items if item.importance >= min_importance]
@@ -467,5 +486,6 @@ def extract_knowledge(
     numbered = [replace(item, id=f"k_{index:04d}") for index, item in enumerate(items, 1)]
     result = KnowledgeCollection(source=source, model=client.model, knowledge_items=numbered)
     save_json_atomic(result.to_dict(), destination)
-    diagnostic_path.unlink(missing_ok=True)
+    if not had_fallback:
+        diagnostic_path.unlink(missing_ok=True)
     return result

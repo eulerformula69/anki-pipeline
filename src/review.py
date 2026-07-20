@@ -289,6 +289,7 @@ def review_knowledge(
     source, _, items = load_knowledge_items(knowledge_path)
     groups = group_knowledge_items(items)
     reviews: list[KnowledgeReview] = []
+    had_fallback = False
     for group_number, group in enumerate(groups, start=1):
         LOGGER.info("Knowledge Review: группа %d/%d", group_number, len(groups))
         expected_ids = [item.id for item in group]
@@ -328,11 +329,27 @@ def review_knowledge(
                     responses=responses,
                     model=client.model,
                 )
-                raise KnowledgeReviewError(
-                    "Ollama дважды вернул некорректный Knowledge Review. "
-                    f"Диагностика: {diagnostic_path}"
+                LOGGER.warning(
+                    "Knowledge Review группы %d заменён безопасным keep после двух "
+                    "некорректных ответов. Диагностика: %s",
+                    group_number,
+                    diagnostic_path,
                 )
+                reviews.extend(
+                    KnowledgeReview(
+                        knowledge_id=item_id,
+                        status="keep",
+                        confidence=0.0,
+                        issues=["unclear"],
+                        recommended_action="none",
+                        reason="Автоматический fallback: ответ модели не прошёл проверку.",
+                    )
+                    for item_id in expected_ids
+                )
+                had_fallback = True
+                break
     result = KnowledgeReviewCollection(source, client.model, reviews)
     save_json_atomic(result.to_dict(), destination)
-    diagnostic_path.unlink(missing_ok=True)
+    if not had_fallback:
+        diagnostic_path.unlink(missing_ok=True)
     return result

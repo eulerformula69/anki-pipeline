@@ -281,6 +281,7 @@ def extract_target_expressions(
     window_size, overlap = 12, 2
     starts = range(0, len(transcript_segments), window_size - overlap)
     windows = [transcript_segments[start:start + window_size] for start in starts]
+    had_fallback = False
     for window_number, window in enumerate(windows, start=1):
         if not window:
             continue
@@ -345,9 +346,15 @@ def extract_target_expressions(
                     "ollama_responses": responses, "model": client.model,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }, diagnostic_path)
-                raise TargetExpressionError(
-                    f"Ollama дважды вернул некорректные выражения. Диагностика: {diagnostic_path}"
+                LOGGER.warning(
+                    "Окно %d/%d пропущено после двух некорректных ответов Ollama. "
+                    "Диагностика: %s",
+                    window_number,
+                    len(windows),
+                    diagnostic_path,
                 )
+                had_fallback = True
+                break
     merged: dict[tuple[str, str], TargetExpression] = {}
     for expression in all_expressions:
         key = (expression.type, expression.surface)
@@ -370,7 +377,8 @@ def extract_target_expressions(
     ]
     result = TargetExpressionCollection(source, client.model, target_language, expressions)
     save_json_atomic(result.to_dict(), destination)
-    diagnostic_path.unlink(missing_ok=True)
+    if not had_fallback:
+        diagnostic_path.unlink(missing_ok=True)
     return result
 
 

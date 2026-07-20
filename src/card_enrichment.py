@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
 import re
 
-from .models import CardCandidate, KnowledgeItem
+from .models import CardCandidate, KnowledgeItem, KnowledgeReview
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,30 @@ class CardProposal:
     back: str
     extra: str
     difficulty: int
+
+
+def fallback_card_proposals(
+    items: list[KnowledgeItem], reviews: list[KnowledgeReview]
+) -> list[CardProposal]:
+    review_by_id = {review.knowledge_id: review for review in reviews}
+    proposals: list[CardProposal] = []
+    for item in items:
+        if review_by_id[item.id].status == "discard":
+            continue
+        subject = " ".join(item.statement.split())
+        front = f'What should you remember about “{subject[:76].rstrip()}”?'
+        back = " ".join(
+            part for part in (item.statement.strip(), item.explanation.strip()) if part
+        )[:500]
+        proposals.append(CardProposal(
+            knowledge_ids=[item.id],
+            card_type="basic",
+            front=front[:120],
+            back=back,
+            extra="Automatic fallback: manually verify this card.",
+            difficulty=3,
+        ))
+    return proposals
 
 
 def normalize_front(text: str) -> str:

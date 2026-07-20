@@ -206,7 +206,7 @@ def test_retry_filter_numbering_and_utf8(tmp_path) -> None:
     assert "Ёмкое" in destination.read_text(encoding="utf-8")
 
 
-def test_diagnostic_preserves_existing_result(tmp_path) -> None:
+def test_invalid_block_uses_fallback_and_preserves_diagnostic(tmp_path) -> None:
     transcript_path, semantic_path = write_sources(tmp_path)
     invalid = ({"knowledge_items": [{"bad": True}]}, "invalid raw")
     client = SequenceClient([invalid, invalid])
@@ -214,21 +214,32 @@ def test_diagnostic_preserves_existing_result(tmp_path) -> None:
     destination.write_text("existing", encoding="utf-8")
     diagnostic = tmp_path / "diagnostic.json"
 
-    with pytest.raises(KnowledgeExtractionError, match="дважды"):
-        extract_knowledge(
-            transcript_path,
-            semantic_path,
-            destination,
-            diagnostic,
-            client,
-        )
+    result = extract_knowledge(
+        transcript_path,
+        semantic_path,
+        destination,
+        diagnostic,
+        client,
+    )
 
-    assert destination.read_text(encoding="utf-8") == "existing"
+    assert result.knowledge_items[0].statement == "Definition"
+    assert "Automatic fallback" in result.knowledge_items[0].explanation
     diagnostic_data = json.loads(diagnostic.read_text(encoding="utf-8"))
     assert diagnostic_data["semantic_segment_id"] == 0
     assert len(diagnostic_data["ollama_responses"]) == 2
     assert diagnostic_data["model"] == "qwen3:8b"
     assert diagnostic_data["created_at"]
+
+
+def test_valid_items_survive_invalid_siblings() -> None:
+    data = valid_item()
+    data["knowledge_items"].append(
+        valid_item(source_transcript_segment_ids=[99])["knowledge_items"][0]
+    )
+
+    proposals = parse(data)
+
+    assert len(proposals) == 1
 
 
 def test_exact_duplicate_is_deduplicated() -> None:

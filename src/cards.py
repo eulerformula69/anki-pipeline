@@ -18,6 +18,7 @@ from .models import (
 from .card_enrichment import (
     CardProposal,
     deduplicate_candidates,
+    fallback_card_proposals,
     normalize_front,
     number_candidates,
     proposal_to_candidate,
@@ -364,6 +365,7 @@ def generate_card_candidates(
     validate_review_coverage(items, reviews)
     groups = group_card_inputs(items, reviews)
     proposals: list[CardProposal] = []
+    had_fallback = False
     for group_number, (group_items, group_reviews) in enumerate(groups, start=1):
         LOGGER.info("Card Candidates: группа %d/%d", group_number, len(groups))
         responses: list[str] = []
@@ -408,10 +410,15 @@ def generate_card_candidates(
                     responses=responses,
                     model=client.model,
                 )
-                raise CardGenerationError(
-                    "Ollama дважды вернул некорректные Card Candidates. "
-                    f"Диагностика: {diagnostic_path}"
+                LOGGER.warning(
+                    "Card Candidates группы %d заменены безопасными черновиками после "
+                    "двух некорректных ответов. Диагностика: %s",
+                    group_number,
+                    diagnostic_path,
                 )
+                proposals.extend(fallback_card_proposals(group_items, group_reviews))
+                had_fallback = True
+                break
     knowledge_by_id = {item.id: item for item in items}
     expressions_by_knowledge: dict[str, list] = defaultdict(list)
     verified_expressions: list = []
@@ -432,7 +439,8 @@ def generate_card_candidates(
     candidates = number_candidates(candidates)
     result = CardCandidateCollection(source, client.model, candidates)
     save_json_atomic(result.to_dict(), destination)
-    diagnostic_path.unlink(missing_ok=True)
+    if not had_fallback:
+        diagnostic_path.unlink(missing_ok=True)
     return result
 
 

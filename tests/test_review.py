@@ -163,15 +163,15 @@ def test_review_retries_and_saves_utf8(tmp_path) -> None:
     assert "Полезное" in destination.read_text(encoding="utf-8")
 
 
-def test_review_diagnostic_preserves_existing_file(tmp_path) -> None:
+def test_invalid_review_uses_keep_fallback_and_preserves_diagnostic(tmp_path) -> None:
     invalid = ({"reviews": []}, "invalid")
     client = SequenceClient([invalid, invalid])
     destination = tmp_path / "review.json"
     destination.write_text("existing", encoding="utf-8")
     diagnostic = tmp_path / "diagnostic.json"
 
-    with pytest.raises(KnowledgeReviewError, match="дважды"):
-        review_knowledge(write_knowledge(tmp_path), destination, diagnostic, client)
+    result = review_knowledge(write_knowledge(tmp_path), destination, diagnostic, client)
 
-    assert destination.read_text(encoding="utf-8") == "existing"
+    assert [item.status for item in result.reviews] == ["keep", "keep"]
+    assert all(item.confidence == 0 for item in result.reviews)
     assert len(json.loads(diagnostic.read_text(encoding="utf-8"))["ollama_responses"]) == 2

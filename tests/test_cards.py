@@ -350,7 +350,7 @@ def test_card_generation_retries_and_numbers_result(tmp_path) -> None:
     assert "Как определить" in destination.read_text(encoding="utf-8")
 
 
-def test_card_diagnostic_preserves_existing_result(tmp_path) -> None:
+def test_invalid_cards_use_drafts_and_preserve_diagnostic(tmp_path) -> None:
     knowledge_path, review_path = write_card_sources(tmp_path)
     invalid = ({"card_candidates": [card(["k_0001"], card_type="wrong")]}, "bad")
     client = SequenceClient([invalid, invalid])
@@ -358,10 +358,10 @@ def test_card_diagnostic_preserves_existing_result(tmp_path) -> None:
     destination.write_text("existing", encoding="utf-8")
     diagnostic = tmp_path / "diagnostic.json"
 
-    with pytest.raises(CardGenerationError, match="дважды"):
-        generate_card_candidates(
-            knowledge_path, review_path, destination, diagnostic, client
-        )
+    result = generate_card_candidates(
+        knowledge_path, review_path, destination, diagnostic, client
+    )
 
-    assert destination.read_text(encoding="utf-8") == "existing"
+    assert result.card_candidates
+    assert "Automatic fallback" in result.card_candidates[0].extra
     assert len(json.loads(diagnostic.read_text(encoding="utf-8"))["ollama_responses"]) == 2
