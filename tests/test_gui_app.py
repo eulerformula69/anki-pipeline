@@ -17,9 +17,10 @@ def test_review_ui_uses_candidate_thumbnails_and_non_sticky_toolbar():
     from pathlib import Path
 
     package = Path(__file__).parents[1] / "src" / "gui"
-    template = (package / "templates" / "review.html").read_text(encoding="utf-8")
+    template = (package / "templates" / "media_controls.html").read_text(encoding="utf-8")
     css = (package / "static" / "app.css").read_text(encoding="utf-8")
 
     assert "image-candidates/{{ loop.index0 }}" in template
     assert 'class="candidate"' in template
+    assert template.count('hx-swap="outerHTML"') == 4
     assert ".review-toolbar{position:sticky" not in css

@@ -60,6 +60,26 @@ def _safe_output(state: Any, root: Path) -> Path:
     return output
 
 
+def _alternatives(output: Path, card_id: str) -> list[dict[str, Any]]:
+    candidate_file = output / "media_candidates" / card_id / "candidates.json"
+    try:
+        value = json.loads(candidate_file.read_text(encoding="utf-8")).get("candidates", [])
+        return value if isinstance(value, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _media_fragment(request: Request, state: Any, output: Path, card_id: str) -> HTMLResponse:
+    review = request.app.state.reviews.load_or_create(output)
+    card = next((item for item in review["cards"] if item["card_id"] == card_id), None)
+    if card is None:
+        raise HTTPException(404, "Карточка не найдена.")
+    return _render(request, "media_controls.html", {
+        "job": state,
+        "card": {**card, "alternatives": _alternatives(output, card_id)},
+    })
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request):
     root = request.app.state.root
@@ -177,12 +197,11 @@ def review_page(request: Request, job_id: str):
     raw = {item["card_id"]: item for item in automatic["card_candidates"]}
     cards = []
     for card in review["cards"]:
-        candidate_file = output / "media_candidates" / card["card_id"] / "candidates.json"
-        try:
-            alternatives = json.loads(candidate_file.read_text(encoding="utf-8")).get("candidates", [])
-        except (OSError, json.JSONDecodeError):
-            alternatives = []
-        cards.append({**card, "meta": raw.get(card["card_id"], {}), "alternatives": alternatives})
+        cards.append({
+            **card,
+            "meta": raw.get(card["card_id"], {}),
+            "alternatives": _alternatives(output, card["card_id"]),
+        })
     summary = {"total": len(cards), "included": sum(c["included"] for c in cards), "reviewed": sum(c["reviewed"] for c in cards), "no_image": sum((c.get("image") or {}).get("mode") == "none" for c in cards)}
     return _render(request, "review.html", {"job": state, "review": review, "cards": cards, "summary": summary})
 
@@ -212,8 +231,9 @@ def save_card(
 def remove_image(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()]):
     _check_csrf(request, csrf)
     state = _job(request, job_id)
-    request.app.state.reviews.save_card(_safe_output(state, request.app.state.root), card_id, {"image": {"mode": "none"}})
-    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+    output = _safe_output(state, request.app.state.root)
+    request.app.state.reviews.save_card(output, card_id, {"image": {"mode": "none"}})
+    return _media_fragment(request, state, output, card_id)
 
 
 @router.post("/jobs/{job_id}/review/cards/{card_id}/image-candidates")
@@ -225,7 +245,7 @@ def image_candidates(request: Request, job_id: str, card_id: str, csrf: Annotate
         generate_image_candidates(Path(state.video_path), output, card_id)
     except Exception as exc:
         return _render(request, "error.html", {"message": str(exc)}, 422)
-    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+    return _media_fragment(request, state, output, card_id)
 
 
 @router.post("/jobs/{job_id}/review/cards/{card_id}/image-select")
@@ -239,7 +259,7 @@ def select_image(request: Request, job_id: str, card_id: str, csrf: Annotated[st
     if candidate.is_absolute() or not resolved.is_relative_to(expected) or not resolved.is_file():
         raise HTTPException(422, "Недопустимый кадр.")
     request.app.state.reviews.save_card(output, card_id, {"image": {"mode": "selected_candidate", "path": candidate.as_posix(), "timestamp": timestamp}})
-    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+    return _media_fragment(request, state, output, card_id)
 
 
 @router.post("/jobs/{job_id}/review/cards/{card_id}/image-upload")
@@ -255,7 +275,7 @@ async def upload_image(request: Request, job_id: str, card_id: str, csrf: Annota
         request.app.state.reviews.save_card(output, card_id, {"image": {"mode": "uploaded", "path": relative, "timestamp": 0.0}})
     except ReviewError as exc:
         return _render(request, "error.html", {"message": str(exc)}, 422)
-    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+    return _media_fragment(request, state, output, card_id)
 
 
 @router.post("/jobs/{job_id}/review/approve")
