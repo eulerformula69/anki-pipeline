@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
-from .image_compression import compress_card_image
+from .image_compression import MAX_CARD_IMAGE_BYTES, compress_card_image
 from .models import (
     CardCandidate,
     CardImage,
@@ -249,6 +249,41 @@ def _old_managed_images(destination: Path) -> set[Path]:
         }
     except (OSError, json.JSONDecodeError, KeyError, TypeError):
         return set()
+
+
+def compress_existing_card_images(destination: Path) -> int:
+    """Bring images referenced by an existing manifest under the current limit."""
+    data = _read_json(destination, "card_media.json")
+    cards = data.get("cards", [])
+    if not isinstance(cards, list):
+        raise FrameExtractionError("card_media.json должен содержать массив cards.")
+
+    root = destination.parent.resolve()
+    changed = 0
+    for item in cards:
+        if not isinstance(item, dict) or not isinstance(item.get("image"), dict):
+            continue
+        image_data = item["image"]
+        relative = Path(str(image_data.get("path", "")))
+        image_path = (root / relative).resolve()
+        if relative.is_absolute() or root not in image_path.parents:
+            raise FrameExtractionError(f"Недопустимый путь изображения: {relative}.")
+        if not image_path.is_file():
+            raise FrameExtractionError(f"Не найдено изображение карточки: {image_path}.")
+        if image_path.stat().st_size <= MAX_CARD_IMAGE_BYTES:
+            continue
+        try:
+            with Image.open(image_path) as source:
+                compress_card_image(source, image_path)
+            with Image.open(image_path) as compressed:
+                image_data["width"], image_data["height"] = compressed.size
+        except (OSError, UnidentifiedImageError) as exc:
+            raise FrameExtractionError(f"Не удалось сжать {image_path}: {exc}") from exc
+        changed += 1
+
+    if changed:
+        save_json_atomic(data, destination)
+    return changed
 
 
 def extract_card_images(

@@ -12,7 +12,7 @@ if __package__ in (None, ""):
     from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from src.anki_export import AnkiExportError, build_anki_deck
     from src.cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
-    from src.frame_extraction import FrameExtractionError, extract_card_images
+    from src.frame_extraction import FrameExtractionError, compress_existing_card_images, extract_card_images
     from src.knowledge import KnowledgeExtractionError, extract_knowledge
     from src.output import save_transcript_json, save_transcript_text
     from src.config import LLMConfig, load_local_env
@@ -28,7 +28,7 @@ else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from .anki_export import AnkiExportError, build_anki_deck
     from .cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
-    from .frame_extraction import FrameExtractionError, extract_card_images
+    from .frame_extraction import FrameExtractionError, compress_existing_card_images, extract_card_images
     from .knowledge import KnowledgeExtractionError, extract_knowledge
     from .output import save_transcript_json, save_transcript_text
     from .config import LLMConfig, load_local_env
@@ -172,6 +172,9 @@ def run_pipeline(
 
     if extract_card_images_stage:
         if paths.card_media_json.exists() and not force:
+            compressed = compress_existing_card_images(paths.card_media_json)
+            if compressed:
+                LOGGER.info("Пережато существующих изображений до 10 КБ: %s", compressed)
             LOGGER.info("Медиа карточек уже существует: %s", paths.card_media_json)
             return paths.card_media_json
         if not paths.transcript_json.exists():

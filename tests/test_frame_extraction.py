@@ -12,6 +12,7 @@ from src.frame_extraction import (
     calculate_frame_similarity,
     calculate_quality_score,
     choose_frame_timestamps,
+    compress_existing_card_images,
     extract_card_images,
     extract_frame,
     load_media_sources,
@@ -19,6 +20,28 @@ from src.frame_extraction import (
     select_best_frame,
 )
 from src.models import FrameMetrics, TranscriptSegment
+
+
+def test_existing_card_images_are_compressed_to_ten_kibibytes(tmp_path) -> None:
+    import numpy as np
+
+    media = tmp_path / "media" / "c_0001.jpg"
+    media.parent.mkdir()
+    pixels = np.random.default_rng(42).integers(0, 256, (900, 1600, 3), dtype=np.uint8)
+    Image.fromarray(pixels).save(media)
+    manifest = tmp_path / "card_media.json"
+    manifest.write_text(json.dumps({"cards": [{
+        "card_id": "c_0001", "image": {
+            "path": "media/c_0001.jpg", "width": 1600, "height": 900,
+        },
+    }]}), encoding="utf-8")
+
+    assert compress_existing_card_images(manifest) == 1
+    assert media.stat().st_size <= 10 * 1024
+    saved = json.loads(manifest.read_text(encoding="utf-8"))
+    with Image.open(media) as compressed:
+        dimensions = [saved["cards"][0]["image"][key] for key in ("width", "height")]
+        assert dimensions == list(compressed.size)
 
 
 def write_sources(root: Path) -> tuple[Path, Path]:
