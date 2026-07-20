@@ -23,4 +23,6 @@ def test_review_ui_uses_candidate_thumbnails_and_non_sticky_toolbar():
     assert "image-candidates/{{ loop.index0 }}" in template
     assert 'class="candidate"' in template
     assert template.count('hx-swap="outerHTML"') == 4
+    assert "Показать варианты кадров" in template
+    assert "{% if not card.alternatives %}" in template
     assert ".review-toolbar{position:sticky" not in css
