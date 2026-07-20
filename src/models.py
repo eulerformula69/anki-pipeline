@@ -153,3 +153,57 @@ class TargetExpressionCollection:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class FrameMetrics:
+    brightness_mean: float
+    dark_ratio: float
+    sharpness: float
+
+
+@dataclass(frozen=True)
+class CardImage:
+    path: str
+    timestamp: float
+    width: int
+    height: int
+    selection_method: str
+    quality_score: float
+    metrics: FrameMetrics
+
+
+@dataclass(frozen=True)
+class CardMedia:
+    card_id: str
+    source_transcript_segment_ids: list[int]
+    start: float
+    end: float
+    image: CardImage | None
+    selection_method: str | None = None
+    rejection_reason: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        if self.image is not None:
+            data.pop("selection_method")
+            data.pop("rejection_reason")
+        return data
+
+
+@dataclass(frozen=True)
+class CardMediaCollection:
+    source: str
+    generator: str
+    frames_per_card: int
+    image_policy: str
+    cards: list[CardMedia]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "generator": self.generator,
+            "frames_per_card": self.frames_per_card,
+            "image_policy": self.image_policy,
+            "cards": [card.to_dict() for card in self.cards],
+        }

@@ -1,5 +1,49 @@
 # anki-pipeline
 
+## Кадры для карточек
+
+Независимый локальный этап читает готовые `transcript.json` и
+`card_candidates.json`, извлекает через FFmpeg несколько кадров внутри точных
+таймкодов карточки и выбирает технически лучший кадр с помощью Pillow и NumPy:
+
+```powershell
+python -m src.pipeline "input/video.mkv" `
+  --extract-card-images `
+  --frames-per-card 5 `
+  --image-policy auto
+```
+
+`auto` отбрасывает чёрные, размытые, почти одинаковые и слишком слабые кадры.
+`always` выбирает лучший технически пригодный кадр даже при низкой оценке. `never`
+не вызывает FFmpeg и явно записывает отсутствие изображений. `--force`
+пересоздаёт только этот этап; без него готовый manifest переиспользуется.
+
+Результат находится в `output/<video>/card_media.json`, а выбранные JPEG — в
+`output/<video>/media/<card_id>.jpg`. Пример элемента manifest:
+
+```json
+{
+  "card_id": "c_0001",
+  "source_transcript_segment_ids": [12, 13],
+  "start": 41.2,
+  "end": 49.8,
+  "image": {
+    "path": "media/c_0001.jpg",
+    "timestamp": 45.5,
+    "width": 1280,
+    "height": 720,
+    "selection_method": "local_quality_score",
+    "quality_score": 0.81,
+    "metrics": {"brightness_mean": 121.4, "dark_ratio": 0.01, "sharpness": 84.3}
+  }
+}
+```
+
+`image: null` — нормальный результат; рядом сохраняются причина отказа и способ
+выбора. Этап оценивает только технические свойства изображения: OCR, vision-модель
+и понимание содержимого слайда пока не используются. Для `auto` и `always` нужен
+FFmpeg в `PATH`.
+
 ## Выражения изучаемого языка
 
 Транскрипт и объяснения могут быть на английском, а изучаемые выражения — на японском

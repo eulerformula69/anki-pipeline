@@ -16,3 +16,5 @@ def test_build_result_paths() -> None:
     )
     assert paths.knowledge_review_json == Path("results/lesson/knowledge_review.json")
     assert paths.card_candidates_json == Path("results/lesson/card_candidates.json")
+    assert paths.card_media_json == Path("results/lesson/card_media.json")
+    assert paths.media_directory == Path("results/lesson/media")

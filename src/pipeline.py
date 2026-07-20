@@ -9,6 +9,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from src.audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from src.cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
+    from src.frame_extraction import FrameExtractionError, extract_card_images
     from src.knowledge import KnowledgeExtractionError, extract_knowledge
     from src.output import save_transcript_json, save_transcript_text
     from src.ollama_client import OllamaClient, OllamaError
@@ -20,6 +21,7 @@ if __package__ in (None, ""):
 else:
     from .audio import AudioExtractionError, ensure_ffmpeg, extract_audio
     from .cards import CardGenerationError, generate_card_candidates, localize_existing_candidates
+    from .frame_extraction import FrameExtractionError, extract_card_images
     from .knowledge import KnowledgeExtractionError, extract_knowledge
     from .output import save_transcript_json, save_transcript_text
     from .ollama_client import OllamaClient, OllamaError
@@ -59,14 +61,37 @@ def run_pipeline(
     extract_expressions: bool = False,
     target_language: str = "ja",
     target_glossary: Path | None = None,
+    extract_card_images_stage: bool = False,
+    frames_per_card: int = 5,
+    image_policy: str = "auto",
 ) -> Path:
     paths = build_result_paths(video)
-    if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions)) > 1:
+    if sum((extract_knowledge_items, review_knowledge_items, generate_cards, extract_expressions, extract_card_images_stage)) > 1:
         raise ValueError(
             "Используйте только один из флагов --extract-knowledge, "
             "--review-knowledge, --extract-target-expressions или "
-            "--generate-card-candidates за запуск."
+            "--generate-card-candidates или --extract-card-images за запуск."
         )
+
+    if extract_card_images_stage:
+        if paths.card_media_json.exists() and not force:
+            LOGGER.info("Медиа карточек уже существует: %s", paths.card_media_json)
+            return paths.card_media_json
+        if not paths.transcript_json.exists():
+            raise FrameExtractionError(
+                "Не найден transcript.json. Сначала запустите транскрипцию видео."
+            )
+        if not paths.card_candidates_json.exists():
+            raise FrameExtractionError(
+                "Не найден card_candidates.json. Сначала выполните --generate-card-candidates."
+            )
+        extract_card_images(
+            video, paths.transcript_json, paths.card_candidates_json,
+            paths.card_media_json, paths.media_directory,
+            frames_per_card=frames_per_card, image_policy=image_policy,
+        )
+        LOGGER.info("Медиа карточек: %s", paths.card_media_json)
+        return paths.card_media_json
 
     if extract_expressions:
         if paths.target_expressions_json.exists() and not force:
@@ -304,6 +329,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Локальный JSON-глоссарий; по умолчанию glossaries/<language>.json",
     )
+    parser.add_argument(
+        "--extract-card-images", action="store_true",
+        help="Локально выбрать кадры для готовых кандидатов карточек",
+    )
+    parser.add_argument(
+        "--frames-per-card", type=int, choices=range(1, 21), default=5, metavar="1-20",
+        help="Число кадров-кандидатов для карточки (default: 5)",
+    )
+    parser.add_argument(
+        "--image-policy", choices=("auto", "always", "never"), default="auto",
+        help="Политика выбора изображения (default: auto)",
+    )
     return parser
 
 
@@ -332,6 +369,9 @@ def main(argv: list[str] | None = None) -> int:
             extract_expressions=args.extract_target_expressions,
             target_language=args.target_language,
             target_glossary=args.target_glossary,
+            extract_card_images_stage=args.extract_card_images,
+            frames_per_card=args.frames_per_card,
+            image_policy=args.image_policy,
         )
     except (
         FileNotFoundError,
@@ -344,6 +384,7 @@ def main(argv: list[str] | None = None) -> int:
         KnowledgeReviewError,
         CardGenerationError,
         TargetExpressionError,
+        FrameExtractionError,
     ) as exc:
         LOGGER.error("%s", exc)
         return 1

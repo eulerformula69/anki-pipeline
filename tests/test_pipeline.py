@@ -145,3 +145,23 @@ def test_cards_do_not_run_previous_stages_or_require_video(tmp_path, monkeypatch
 
     assert called
     assert result == result_dir / "card_candidates.json"
+
+
+def test_card_images_are_independent_and_reused(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    result_dir = Path("output/video")
+    result_dir.mkdir(parents=True)
+    (result_dir / "transcript.json").write_text("{}", encoding="utf-8")
+    (result_dir / "card_candidates.json").write_text("{}", encoding="utf-8")
+    called = []
+    monkeypatch.setattr("src.pipeline.extract_card_images", lambda *a, **k: called.append((a, k)))
+    forbidden = lambda *a, **k: pytest.fail("Предыдущий этап не должен запускаться")
+    monkeypatch.setattr("src.pipeline.ensure_ffmpeg", forbidden)
+    monkeypatch.setattr("src.pipeline.transcribe_audio", forbidden)
+    video = Path("input/video.mkv")
+    assert run_pipeline(video, extract_card_images_stage=True, frames_per_card=3, image_policy="never") == result_dir / "card_media.json"
+    assert called[0][1] == {"frames_per_card": 3, "image_policy": "never"}
+    (result_dir / "card_media.json").write_text("{}", encoding="utf-8")
+    called.clear()
+    assert run_pipeline(video, extract_card_images_stage=True) == result_dir / "card_media.json"
+    assert not called

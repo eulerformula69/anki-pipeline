@@ -20,6 +20,8 @@ class ResultPaths:
     cards_diagnostic_json: Path
     target_expressions_json: Path
     target_expressions_diagnostic_json: Path
+    card_media_json: Path
+    media_directory: Path
 
 
 def build_result_paths(video: Path, output_root: Path = Path("output")) -> ResultPaths:
@@ -39,4 +41,6 @@ def build_result_paths(video: Path, output_root: Path = Path("output")) -> Resul
         cards_diagnostic_json=directory / "card_candidates_diagnostic.json",
         target_expressions_json=directory / "target_expressions.json",
         target_expressions_diagnostic_json=directory / "target_expressions_diagnostic.json",
+        card_media_json=directory / "card_media.json",
+        media_directory=directory / "media",
     )
