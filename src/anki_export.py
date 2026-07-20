@@ -5,7 +5,6 @@ import html
 import json
 import os
 import re
-import shutil
 import tempfile
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 
+from .image_compression import compress_card_image
 from .models import CardCandidate, TargetExpression
 from .semantic import save_json_atomic
 
@@ -202,11 +202,9 @@ def _stable_note(genanki: Any, guid_value: str, model: Any, fields: list[str], t
 def stage_media_image(source: Path, destination: Path) -> None:
     try:
         with Image.open(source) as image:
-            normalized = image.convert("RGB")
-            normalized.thumbnail((710, 400), Image.Resampling.LANCZOS)
-            normalized.save(destination, format="JPEG", quality=65, optimize=True)
-    except (OSError, UnidentifiedImageError):
-        shutil.copy2(source, destination)
+            compress_card_image(image, destination)
+    except (OSError, UnidentifiedImageError) as exc:
+        raise AnkiExportError(f"Не удалось подготовить изображение {source}: {exc}") from exc
 
 
 def build_anki_deck(

@@ -47,8 +47,10 @@ def write_inputs(root: Path, *, with_image: bool = True) -> tuple[Path, Path, Pa
     ]}, ensure_ascii=False), encoding="utf-8")
     image = root / "media" / "c_0001.jpg"
     if with_image:
+        from PIL import Image
+
         image.parent.mkdir()
-        image.write_bytes(b"jpeg")
+        Image.new("RGB", (32, 18), "red").save(image, format="JPEG")
     media.write_text(json.dumps({"source": "lesson.mkv", "cards": [{
         "card_id": "c_0001", "start": 12.5,
         "image": {"path": "media/c_0001.jpg"} if with_image else None,
@@ -157,6 +159,24 @@ def test_export_image_is_resized_without_distortion(tmp_path) -> None:
     with Image.open(destination) as result:
         assert result.size == (710, 399)
         assert result.format == "JPEG"
+    assert destination.stat().st_size <= 10 * 1024
+
+
+def test_export_image_never_exceeds_ten_kibibytes(tmp_path) -> None:
+    import numpy as np
+    from PIL import Image
+
+    source = tmp_path / "noisy.png"
+    destination = tmp_path / "compressed.jpg"
+    pixels = np.random.default_rng(42).integers(0, 256, (900, 1600, 3), dtype=np.uint8)
+    Image.fromarray(pixels, "RGB").save(source)
+
+    stage_media_image(source, destination)
+
+    assert destination.stat().st_size <= 10 * 1024
+    with Image.open(destination) as result:
+        assert result.width <= 710
+        assert result.height <= 400
 
 
 def test_missing_optional_files_builds_text_only_deck(tmp_path, fake_genanki) -> None:

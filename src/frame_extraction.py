@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
+from .image_compression import compress_card_image
 from .models import (
     CardCandidate,
     CardImage,
@@ -286,10 +287,15 @@ def extract_card_images(
                 prepared.append(CardMedia(card.card_id, card.source_transcript_segment_ids, start, end, None, "no_suitable_frame", "all_candidates_rejected"))
                 continue
             final = media_directory / f"{card.card_id}.jpg"
-            staged.append((selected.path, final))
+            compressed = temp / f"{card.card_id}-compressed.jpg"
+            with Image.open(selected.path) as selected_image:
+                compress_card_image(selected_image, compressed)
+            with Image.open(compressed) as compressed_image:
+                width, height = compressed_image.size
+            staged.append((compressed, final))
             image = CardImage(
                 path=final.relative_to(destination.parent).as_posix(), timestamp=round(selected.timestamp, 6),
-                width=selected.width, height=selected.height, selection_method="local_quality_score",
+                width=width, height=height, selection_method="local_quality_score",
                 quality_score=selected.quality_score, metrics=selected.metrics,
             )
             prepared.append(CardMedia(card.card_id, card.source_transcript_segment_ids, start, end, image))
