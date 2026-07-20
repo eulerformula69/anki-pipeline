@@ -20,8 +20,6 @@
   {% include "media_controls.html" %}
 </article>{% endfor %}
 </div>
-<section class="panel export"><h2>Финальный экспорт</h2><p>Колода будет создана только отдельным действием после approval.</p>
-{% if review.status == 'approved' %}<form method="post" action="/jobs/{{ job.job_id }}/export" onsubmit="return confirm('Создать колоду из {{ summary.included }} карточек?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Создать Anki-колоду</button></form>
-{% else %}<form method="post" action="/jobs/{{ job.job_id }}/review/approve"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">Одобрить карточки</button></form>{% endif %}</section>
+{% include "export_panel.html" %}
 <script>const q=document.querySelector('#search'),f=document.querySelector('#filter');function filter(){document.querySelectorAll('.review-card').forEach(c=>{let ok=c.innerText.toLowerCase().includes(q.value.toLowerCase()),v=f.value;if(v==='included')ok&&=c.dataset.included==='true';if(v==='excluded')ok&&=c.dataset.included==='false';if(v==='changed')ok&&=c.dataset.changed==='true';if(v==='unreviewed')ok&&=c.dataset.reviewed==='false';if(v==='noimage')ok&&=c.dataset.image==='none';c.hidden=!ok})}q.oninput=filter;f.onchange=filter;</script>
 {% endblock %}

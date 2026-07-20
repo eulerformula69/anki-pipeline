@@ -3,8 +3,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from src.gui.jobs import JobManager
-from src.gui.schemas import JobState
-from src.gui.services import compute_plan
+from src.gui.schemas import JobState, PipelineRunRequest
+from src.gui.services import PipelineRunner, compute_plan
 
 
 def test_plan_adds_missing_dependencies(tmp_path):
@@ -32,3 +32,27 @@ def test_manager_restores_saved_job_after_restart(tmp_path):
     manager = JobManager(output_root=tmp_path / "output")
 
     assert manager.get("saved-job").source == "Lesson"
+
+
+def test_target_transcription_refreshes_expressions_with_native_evidence(tmp_path, monkeypatch):
+    video = tmp_path / "video.mkv"
+    video.write_bytes(b"video")
+    output = tmp_path / "output" / "video"
+    output.mkdir(parents=True)
+    (output / "transcript.json").write_text("{}", encoding="utf-8")
+    (output / "target_expressions.json").write_text("{}", encoding="utf-8")
+    calls = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "src.gui.services.run_pipeline",
+        lambda path, **kwargs: calls.append(kwargs) or path,
+    )
+
+    PipelineRunner().run(
+        PipelineRunRequest(video, ["target_transcription"], "Lesson"),
+        lambda stage, event: None,
+    )
+
+    assert calls[0]["transcribe_target_stage"] is True
+    assert calls[1]["extract_expressions"] is True
+    assert calls[1]["force"] is True

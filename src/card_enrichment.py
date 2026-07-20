@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 import re
 
 from .models import CardCandidate, KnowledgeItem
@@ -17,7 +18,32 @@ class CardProposal:
 
 
 def normalize_front(text: str) -> str:
-    return " ".join(text.casefold().split())
+    return " ".join(re.findall(r"\w+", text.casefold()))
+
+
+QUESTION_STOPWORDS = {
+    "a", "an", "can", "does", "for", "how", "in", "is", "of", "the",
+    "to", "what", "when", "why", "with",
+}
+
+
+def candidates_are_duplicates(first: CardCandidate, second: CardCandidate) -> bool:
+    first_front, second_front = normalize_front(first.front), normalize_front(second.front)
+    if first_front == second_front:
+        return True
+    first_tokens = set(first_front.split()) - QUESTION_STOPWORDS
+    second_tokens = set(second_front.split()) - QUESTION_STOPWORDS
+    shared = first_tokens & second_tokens
+    union = first_tokens | second_tokens
+    front_similarity = SequenceMatcher(None, first_front, second_front).ratio()
+    token_similarity = len(shared) / len(union) if union else 0.0
+    first_answer = normalize_front(first.back)
+    second_answer = normalize_front(second.back)
+    answer_similarity = SequenceMatcher(None, first_answer, second_answer).ratio()
+    return (
+        (front_similarity >= 0.78 and answer_similarity >= 0.62)
+        or (token_similarity >= 0.6 and answer_similarity >= 0.58)
+    )
 
 
 def build_tags(items: list[KnowledgeItem], card_type: str) -> list[str]:
@@ -92,14 +118,18 @@ def proposal_to_candidate(
 
 def deduplicate_candidates(candidates: list[CardCandidate]) -> list[CardCandidate]:
     unique: list[CardCandidate] = []
-    positions: dict[str, int] = {}
     for candidate in candidates:
-        key = normalize_front(candidate.front)
-        if key not in positions:
-            positions[key] = len(unique)
+        index = next(
+            (
+                position
+                for position, existing in enumerate(unique)
+                if candidates_are_duplicates(existing, candidate)
+            ),
+            None,
+        )
+        if index is None:
             unique.append(candidate)
             continue
-        index = positions[key]
         existing = unique[index]
         unique[index] = replace(
             existing,

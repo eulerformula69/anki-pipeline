@@ -26,3 +26,8 @@ def test_review_ui_uses_candidate_thumbnails_and_non_sticky_toolbar():
     assert "Показать варианты кадров" in template
     assert "{% if not card.alternatives %}" in template
     assert ".review-toolbar{position:sticky" not in css
+    export = (package / "templates" / "export_panel.html").read_text(encoding="utf-8")
+    assert 'name="deck_name"' in export
+    assert 'name="global_tags"' in export
+    assert "confirm(" not in export
+    assert 'hx-target="#export-panel"' in export

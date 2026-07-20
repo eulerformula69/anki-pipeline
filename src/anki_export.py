@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from PIL import Image, UnidentifiedImageError
+
 from .models import CardCandidate, TargetExpression
 from .semantic import save_json_atomic
 
@@ -197,16 +199,28 @@ def _stable_note(genanki: Any, guid_value: str, model: Any, fields: list[str], t
     return StableNote(model=model, fields=fields, tags=tags)
 
 
+def stage_media_image(source: Path, destination: Path) -> None:
+    try:
+        with Image.open(source) as image:
+            normalized = image.convert("RGB")
+            normalized.thumbnail((710, 400), Image.Resampling.LANCZOS)
+            normalized.save(destination, format="JPEG", quality=65, optimize=True)
+    except (OSError, UnidentifiedImageError):
+        shutil.copy2(source, destination)
+
+
 def build_anki_deck(
     cards_path: Path, expressions_path: Path, media_manifest_path: Path,
     destination: Path, manifest_path: Path, *, deck_name: str | None = None,
     approved_cards_path: Path | None = None,
+    global_tags: list[str] | None = None,
 ) -> list[ExportedNote]:
     source, cards = load_card_candidates(cards_path)
     expressions = load_verified_expressions(expressions_path, expected_source=source)
     media = load_card_media(media_manifest_path, destination.parent, expected_source=source)
     review_metadata: dict[str, Any] = {}
     field_overrides: dict[str, dict[str, str]] = {}
+    common_tags = _string_list(global_tags or [], "global_tags")
     if approved_cards_path is not None:
         review = _load_object(approved_cards_path, "approved_cards.json")
         assert review is not None
@@ -276,7 +290,10 @@ def build_anki_deck(
         package_media: list[str] = []
         source_prefix = hashlib.sha256(source.encode("utf-8")).hexdigest()[:10]
         for card in cards:
-            anki_tags = [re.sub(r"\s+", "_", tag.strip()) for tag in card.tags]
+            anki_tags = [
+                re.sub(r"\s+", "_", tag.strip())
+                for tag in dict.fromkeys([*card.tags, *common_tags])
+            ]
             if any(not tag for tag in anki_tags):
                 raise AnkiExportError(f"Карточка {card.card_id} содержит пустой тег.")
             linked = [expressions[item_id] for item_id in (card.expression_ids or []) if item_id in expressions]
@@ -293,9 +310,9 @@ def build_anki_deck(
             if card.card_id in media:
                 media_path, start_seconds = media[card.card_id]
                 if media_path is not None:
-                    media_name = f"{source_prefix}_{card.card_id}{media_path.suffix.lower()}"
+                    media_name = f"{source_prefix}_{card.card_id}.jpg"
                     staged_media = temp / media_name
-                    shutil.copy2(media_path, staged_media)
+                    stage_media_image(media_path, staged_media)
                     package_media.append(str(staged_media))
                     image_html = f'<img src="{html.escape(media_name, quote=True)}">'
             guid = stable_guid(source, card.card_id)
@@ -328,6 +345,7 @@ def build_anki_deck(
         "deck_name": deck_name or Path(source).stem,
         "deck_id": stable_deck_id(source), "model_id": MODEL_ID,
         "package": destination.name,
+        "global_tags": common_tags,
         "notes": [asdict(item) for item in exported], **review_metadata,
     }, manifest_path)
     return exported

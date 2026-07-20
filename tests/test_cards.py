@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from src.card_enrichment import candidates_are_duplicates
 from src.cards import (
     CardGenerationError,
     CardProposal,
@@ -132,6 +133,20 @@ def test_deduplication_and_stable_card_ids() -> None:
 
     numbered = number_candidates([first, second])
     assert [candidate.card_id for candidate in numbered] == ["c_0001", "c_0002"]
+
+
+def test_semantically_redundant_cards_are_deduplicated() -> None:
+    first = CardCandidate(
+        "", ["k1"], "basic", "What can そう be attached to?",
+        "そう can only be attached to adjectival nouns.", "", 3, 4, ["fact"], [1],
+    )
+    second = CardCandidate(
+        "", ["k2"], "basic", "What is そう attached to?",
+        "The suffix そう is attached only to adjectival nouns.", "", 3, 4, ["fact"], [2],
+    )
+
+    assert candidates_are_duplicates(first, second)
+    assert len(deduplicate_candidates([first, second])) == 1
 
 
 def test_proposal_builds_automatic_fields() -> None:

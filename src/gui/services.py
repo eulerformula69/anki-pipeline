@@ -74,16 +74,28 @@ class PipelineRunner:
                 "frame_extraction": {"extract_card_images_stage": True},
             }.get(stage, {})
             result = run_pipeline(request.video_path, **common, **flags)
+            if stage == "target_transcription":
+                progress("target_expressions", "started")
+                refreshed = {**common, "force": True}
+                result = run_pipeline(
+                    request.video_path, **refreshed, extract_expressions=True
+                )
+                progress("target_expressions", "completed")
             progress(stage, "completed")
         return result
 
 
-def export_approved_deck(video: Path, deck_name: str | None = None) -> Path:
+def export_approved_deck(
+    video: Path,
+    deck_name: str | None = None,
+    global_tags: list[str] | None = None,
+) -> Path:
     paths = build_result_paths(video)
     build_anki_deck(
         paths.card_candidates_json, paths.target_expressions_json,
         paths.card_media_json, paths.anki_deck, paths.anki_export_manifest_json,
         deck_name=deck_name, approved_cards_path=paths.approved_cards_json,
+        global_tags=global_tags,
     )
     return paths.anki_deck
 

@@ -14,6 +14,7 @@ from src.anki_export import (
     load_verified_expressions,
     stable_deck_id,
     stable_guid,
+    stage_media_image,
 )
 
 
@@ -130,6 +131,32 @@ def test_build_deck_escapes_html_packages_media_and_writes_manifest(tmp_path, fa
     result = json.loads(manifest.read_text(encoding="utf-8"))
     assert result["notes"][0]["expression_ids"] == ["e_verified", "e_transcribed"]
     assert result["notes"][0]["start_seconds"] == 12.5
+
+
+def test_export_adds_global_tags(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+
+    build_anki_deck(
+        cards, expressions, media, tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+        global_tags=["japanese", "lesson 24"],
+    )
+
+    assert FakePackage.last.deck.notes[0].tags == ["definition", "japanese", "lesson_24"]
+    assert json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))["global_tags"] == ["japanese", "lesson 24"]
+
+
+def test_export_image_is_resized_without_distortion(tmp_path) -> None:
+    from PIL import Image
+
+    source = tmp_path / "large.png"
+    destination = tmp_path / "small.jpg"
+    Image.new("RGB", (1920, 1080), "red").save(source)
+
+    stage_media_image(source, destination)
+
+    with Image.open(destination) as result:
+        assert result.size == (710, 399)
+        assert result.format == "JPEG"
 
 
 def test_missing_optional_files_builds_text_only_deck(tmp_path, fake_genanki) -> None:

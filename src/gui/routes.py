@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import os
 import re
@@ -77,6 +78,28 @@ def _media_fragment(request: Request, state: Any, output: Path, card_id: str) ->
     return _render(request, "media_controls.html", {
         "job": state,
         "card": {**card, "alternatives": _alternatives(output, card_id)},
+    })
+
+
+def _export_fragment(
+    request: Request,
+    state: Any,
+    output: Path,
+    review: dict[str, Any],
+    *,
+    deck_name: str = "",
+    global_tags: str = "",
+    exported: bool = False,
+) -> HTMLResponse:
+    included = sum(bool(card.get("included")) for card in review["cards"])
+    return _render(request, "export_panel.html", {
+        "job": state,
+        "review": review,
+        "included": included,
+        "excluded": len(review["cards"]) - included,
+        "deck_name": deck_name or state.source,
+        "global_tags": global_tags,
+        "exported": exported,
     })
 
 
@@ -283,22 +306,42 @@ def approve(request: Request, job_id: str, csrf: Annotated[str, Form()]):
     _check_csrf(request, csrf)
     state = _job(request, job_id)
     try:
-        request.app.state.reviews.approve(_safe_output(state, request.app.state.root))
+        output = _safe_output(state, request.app.state.root)
+        review = request.app.state.reviews.approve(output)
     except ReviewError as exc:
         return _render(request, "error.html", {"message": str(exc)}, 422)
-    return RedirectResponse(f"/jobs/{job_id}/review", 303)
+    return _export_fragment(request, state, output, review)
 
 
 @router.post("/jobs/{job_id}/export")
-def export(request: Request, job_id: str, csrf: Annotated[str, Form()]):
+def export(
+    request: Request,
+    job_id: str,
+    csrf: Annotated[str, Form()],
+    deck_name: Annotated[str, Form()] = "",
+    global_tags: Annotated[str, Form()] = "",
+):
     _check_csrf(request, csrf)
     state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    clean_name = " ".join(deck_name.split())
+    tags = list(dict.fromkeys(
+        tag.strip() for tag in re.split(r"[,\s]+", global_tags) if tag.strip()
+    ))
+    if not clean_name or len(clean_name) > 120:
+        return HTMLResponse('<p class="error">Название колоды должно содержать от 1 до 120 символов.</p>', 422)
+    if any(len(tag) > 60 for tag in tags):
+        return HTMLResponse('<p class="error">Каждый общий тег должен быть не длиннее 60 символов.</p>', 422)
     try:
-        deck = export_approved_deck(Path(state.video_path))
+        deck = export_approved_deck(Path(state.video_path), clean_name, tags)
+        review = request.app.state.reviews.load_or_create(output)
     except Exception as exc:
-        return _render(request, "error.html", {"message": str(exc)}, 422)
+        return HTMLResponse(f'<p class="error">{html.escape(str(exc))}</p>', 422)
     state.status = "completed"
-    return RedirectResponse(f"/jobs/{job_id}/deck", 303)
+    return _export_fragment(
+        request, state, output, review, deck_name=clean_name,
+        global_tags=", ".join(tags), exported=True,
+    )
 
 
 @router.get("/jobs/{job_id}/deck")

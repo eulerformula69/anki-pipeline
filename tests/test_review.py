@@ -70,12 +70,11 @@ def test_duplicate_or_missing_review_id_is_invalid() -> None:
         parse_review_response(data, ["k1", "k2"])
 
 
-def test_items_are_grouped_by_semantic_segment() -> None:
+def test_items_are_grouped_globally_for_cross_segment_deduplication() -> None:
     groups = group_knowledge_items(items())
 
     assert [[item.id for item in group] for group in groups] == [
-        ["k_0001", "k_0002"],
-        ["k_0003"],
+        ["k_0001", "k_0002", "k_0003"],
     ]
 
 

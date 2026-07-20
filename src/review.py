@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -99,11 +98,15 @@ def load_knowledge_items(path: Path) -> tuple[str, str, list[KnowledgeItem]]:
     return source, model, items
 
 
-def group_knowledge_items(items: list[KnowledgeItem]) -> list[list[KnowledgeItem]]:
-    groups: dict[int, list[KnowledgeItem]] = defaultdict(list)
-    for item in items:
-        groups[item.semantic_segment_id].append(item)
-    return list(groups.values())
+def group_knowledge_items(
+    items: list[KnowledgeItem], *, max_group_size: int = 40
+) -> list[list[KnowledgeItem]]:
+    if max_group_size < 1:
+        raise ValueError("max_group_size должен быть положительным.")
+    return [
+        items[start:start + max_group_size]
+        for start in range(0, len(items), max_group_size)
+    ]
 
 
 def build_review_prompt(
@@ -125,6 +128,11 @@ def build_review_prompt(
 Оцени каждый входной knowledge item, ничего в нём не изменяя.
 Найди слишком общие, частные, длинные, неясные, составные, дублирующиеся,
 слабые примеры и знания с низкой учебной ценностью.
+Оцени весь список глобально, включая знания из разных semantic_segment_id.
+Итоговый набор должен быть компактным: одна сильная учебная цель вместо нескольких
+переформулировок одного правила. Для смысловых повторов используй merge или discard.
+Не сохраняй отдельную карточку-пример, если тот же пример лучше поместить в explanation
+основного правила и он не проверяет самостоятельный навык.
 status: keep, merge, split или discard.
 issues: только {sorted(ALLOWED_REVIEW_ISSUES)}.
 recommended_action: только {sorted(ALLOWED_RECOMMENDED_ACTIONS)}.
