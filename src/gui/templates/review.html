@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="review-toolbar panel">
+  <div><p class="eyebrow">РУЧНАЯ ПРОВЕРКА</p><h1>{{ job.source }}</h1></div>
+  <div class="summary"><span>Всего <b>{{ summary.total }}</b></span><span>Включено <b>{{ summary.included }}</b></span><span>Не просмотрено <b>{{ summary.total-summary.reviewed }}</b></span><span>Без изображения <b>{{ summary.no_image }}</b></span></div>
+  <div class="filters"><input id="search" placeholder="Поиск по тексту или ID"><select id="filter"><option value="all">Все</option><option value="included">Включённые</option><option value="excluded">Исключённые</option><option value="changed">Изменённые</option><option value="unreviewed">Не просмотренные</option><option value="noimage">Без изображения</option></select></div>
+</div>
+<div id="cards">
+{% for card in cards %}<article class="review-card {% if not card.included %}excluded{% endif %}" id="{{ card.card_id }}" data-included="{{ card.included|lower }}" data-changed="{{ card.changed|lower }}" data-reviewed="{{ card.reviewed|lower }}" data-image="{{ (card.image or {}).get('mode','none') }}">
+  <form hx-post="/jobs/{{ job.job_id }}/review/cards/{{ card.card_id }}" hx-target="#save-{{ card.card_id }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="card-head"><div><b>{{ card.card_id }}</b><span>{{ card.meta.card_type }}</span></div><label class="check"><input type="checkbox" name="included" value="true" {% if card.included %}checked{% endif %}> Включить в колоду</label></div>
+    <label>Front<textarea name="front" required>{{ card.front }}</textarea></label>
+    <label>Back<textarea name="back" required>{{ card.back }}</textarea></label>
+    <label>Extra<textarea name="extra">{{ card.extra }}</textarea></label>
+    <div class="fields"><label>Tags<input name="tags" value="{{ card.tags|join(', ') }}"></label><label>Difficulty<input type="number" min="1" max="5" name="difficulty" value="{{ card.difficulty }}"></label><label>Importance<input type="number" min="1" max="5" name="importance" value="{{ card.importance }}"></label></div>
+    <details><summary>Технические данные и evidence</summary><pre>{{ card.meta|tojson(indent=2) }}</pre></details>
+    <div class="actions"><button type="submit">Сохранить карточку</button><span id="save-{{ card.card_id }}"></span></div>
+  </form>
+  <div class="media-box">{% if (card.image or {}).get('mode') != 'none' %}<img src="/jobs/{{ job.job_id }}/media/{{ card.card_id }}" alt="Кадр карточки"><small>{{ card.image.timestamp or '' }} сек.</small>{% else %}<div class="no-image">Без изображения</div>{% endif %}
+    <form method="post" action="/jobs/{{ job.job_id }}/review/cards/{{ card.card_id }}/image-remove"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Убрать изображение</button></form>
+    <form method="post" action="/jobs/{{ job.job_id }}/review/cards/{{ card.card_id }}/image-candidates"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Выбрать другой кадр</button></form>
+    {% for alternative in card.alternatives %}<form method="post" action="/jobs/{{ job.job_id }}/review/cards/{{ card.card_id }}/image-select"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="path" value="{{ alternative.path }}"><input type="hidden" name="timestamp" value="{{ alternative.timestamp }}"><button>Кадр {{ '%.1f'|format(alternative.timestamp) }} с · score {{ '%.2f'|format(alternative.quality_score) }}</button></form>{% endfor %}
+    <form method="post" enctype="multipart/form-data" action="/jobs/{{ job.job_id }}/review/cards/{{ card.card_id }}/image-upload"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="file" name="image" accept="image/jpeg,image/png,image/webp" required><button>Загрузить своё</button></form>
+  </div>
+</article>{% endfor %}
+</div>
+<section class="panel export"><h2>Финальный экспорт</h2><p>Колода будет создана только отдельным действием после approval.</p>
+{% if review.status == 'approved' %}<form method="post" action="/jobs/{{ job.job_id }}/export" onsubmit="return confirm('Создать колоду из {{ summary.included }} карточек?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Создать Anki-колоду</button></form>
+{% else %}<form method="post" action="/jobs/{{ job.job_id }}/review/approve"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">Одобрить карточки</button></form>{% endif %}</section>
+<script>const q=document.querySelector('#search'),f=document.querySelector('#filter');function filter(){document.querySelectorAll('.review-card').forEach(c=>{let ok=c.innerText.toLowerCase().includes(q.value.toLowerCase()),v=f.value;if(v==='included')ok&&=c.dataset.included==='true';if(v==='excluded')ok&&=c.dataset.included==='false';if(v==='changed')ok&&=c.dataset.changed==='true';if(v==='unreviewed')ok&&=c.dataset.reviewed==='false';if(v==='noimage')ok&&=c.dataset.image==='none';c.hidden=!ok})}q.oninput=filter;f.onchange=filter;</script>
+{% endblock %}

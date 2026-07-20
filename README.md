@@ -428,3 +428,28 @@ python -m src.pipeline "input/video.mp4" --generate-card-candidates
 ```powershell
 python -m pytest
 ```
+# Локальный браузерный GUI
+
+GUI запускается одной командой и по умолчанию доступен только на локальном адресе:
+
+```powershell
+python -m src.gui
+```
+
+Параметры адреса можно изменить явно: `python -m src.gui --host 127.0.0.1 --port 7999`.
+Интерфейс принимает YouTube URL через существующий `source_ingest` или безопасно сохраняет
+локальную загрузку в `input/uploads`. Выбранные стадии выполняются одним worker-потоком и
+показываются на странице задачи через SSE.
+
+После генерации `card_candidates.json` создаётся отдельный `approved_cards.json`. Редактор
+никогда не изменяет автоматические артефакты. Состояние review сначала `draft`; только явное
+одобрение переводит его в `approved`. Создание `.apkg` — отдельный POST-запрос, который backend
+отклоняет для draft. Обычный запуск конвейера экспорт не выполняет.
+
+## Контракт ручной проверки
+
+`approved_cards.json` содержит `source`, `review_version: 1`, `status`, `updated_at`,
+`approved_at` и упорядоченный массив `cards`. Каждая запись хранит исходный `card_id`,
+`included`, итоговые `front/back/extra/tags/difficulty/importance`, `reviewed`, `changed`,
+`updated_at`, `overrides` и изображение в одном из режимов `automatic`,
+`selected_candidate`, `uploaded`, `none`. Все пути изображений относительны output-директории.

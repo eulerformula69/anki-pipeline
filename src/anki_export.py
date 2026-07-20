@@ -7,7 +7,7 @@ import os
 import re
 import shutil
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -200,14 +200,69 @@ def _stable_note(genanki: Any, guid_value: str, model: Any, fields: list[str], t
 def build_anki_deck(
     cards_path: Path, expressions_path: Path, media_manifest_path: Path,
     destination: Path, manifest_path: Path, *, deck_name: str | None = None,
+    approved_cards_path: Path | None = None,
 ) -> list[ExportedNote]:
+    source, cards = load_card_candidates(cards_path)
+    expressions = load_verified_expressions(expressions_path, expected_source=source)
+    media = load_card_media(media_manifest_path, destination.parent, expected_source=source)
+    review_metadata: dict[str, Any] = {}
+    field_overrides: dict[str, dict[str, str]] = {}
+    if approved_cards_path is not None:
+        review = _load_object(approved_cards_path, "approved_cards.json")
+        assert review is not None
+        if review.get("status") != "approved" or not isinstance(review.get("approved_at"), str):
+            raise AnkiExportError("Review должен быть явно одобрен перед экспортом.")
+        if review.get("source") != source or not isinstance(review.get("cards"), list):
+            raise AnkiExportError("approved_cards.json относится к другому источнику или повреждён.")
+        originals = {card.card_id: card for card in cards}
+        reviewed: list[CardCandidate] = []
+        reviewed_media: dict[str, tuple[Path | None, float]] = {}
+        seen: set[str] = set()
+        excluded = 0
+        for raw in review["cards"]:
+            if not isinstance(raw, dict) or raw.get("card_id") not in originals or raw["card_id"] in seen:
+                raise AnkiExportError("approved_cards.json содержит неизвестный или повторяющийся card_id.")
+            card_id = raw["card_id"]
+            seen.add(card_id)
+            if not raw.get("included"):
+                excluded += 1
+                continue
+            original = originals[card_id]
+            tags = _string_list(raw.get("tags"), f"{card_id}.tags")
+            reviewed.append(replace(
+                original, front=raw.get("front"), back=raw.get("back"),
+                extra=raw.get("extra", ""), tags=tags,
+                difficulty=raw.get("difficulty"), importance=raw.get("importance"),
+            ))
+            overrides = raw.get("overrides") or {}
+            if not isinstance(overrides, dict) or any(
+                key not in {"target_text", "reading", "romanization"} or not isinstance(value, str)
+                for key, value in overrides.items()
+            ):
+                raise AnkiExportError(f"Некорректные overrides карточки {card_id}.")
+            field_overrides[card_id] = overrides
+            image = raw.get("image") or {"mode": "none"}
+            if image.get("mode") == "none":
+                reviewed_media[card_id] = (None, float(media.get(card_id, (None, 0.0))[1]))
+            else:
+                relative = Path(str(image.get("path", "")))
+                resolved = (destination.parent / relative).resolve()
+                if relative.is_absolute() or ".." in relative.parts or not resolved.is_relative_to(destination.parent.resolve()) or not resolved.is_file():
+                    raise AnkiExportError(f"Недопустимое изображение карточки {card_id}.")
+                reviewed_media[card_id] = (resolved, float(image.get("timestamp") or 0.0))
+        cards = reviewed
+        media = reviewed_media
+        review_metadata = {
+            "review_source": approved_cards_path.name,
+            "review_approved_at": review["approved_at"],
+            "included_cards": len(cards), "excluded_cards": excluded,
+        }
+        if not cards:
+            raise AnkiExportError("Review не содержит включённых карточек.")
     try:
         import genanki
     except ImportError as exc:
         raise AnkiExportError("Не установлен genanki. Выполните pip install -r requirements.txt.") from exc
-    source, cards = load_card_candidates(cards_path)
-    expressions = load_verified_expressions(expressions_path, expected_source=source)
-    media = load_card_media(media_manifest_path, destination.parent, expected_source=source)
     known_card_ids = {card.card_id for card in cards}
     unknown_media = set(media) - known_card_ids
     if unknown_media:
@@ -228,6 +283,10 @@ def build_anki_deck(
             target_text = "\n".join(item.surface for item in linked)
             reading = "\n".join(item.reading for item in linked)
             romanization = "\n".join(item.romanization for item in linked)
+            overrides = field_overrides.get(card.card_id, {})
+            target_text = overrides.get("target_text", target_text)
+            reading = overrides.get("reading", reading)
+            romanization = overrides.get("romanization", romanization)
             image_html = ""
             media_name: str | None = None
             start_seconds: float | None = None
@@ -269,6 +328,6 @@ def build_anki_deck(
         "deck_name": deck_name or Path(source).stem,
         "deck_id": stable_deck_id(source), "model_id": MODEL_ID,
         "package": destination.name,
-        "notes": [asdict(item) for item in exported],
+        "notes": [asdict(item) for item in exported], **review_metadata,
     }, manifest_path)
     return exported

@@ -1,0 +1,315 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import re
+import secrets
+import tempfile
+import uuid
+from dataclasses import asdict
+from pathlib import Path
+from typing import Annotated, Any
+
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.templating import Jinja2Templates
+
+from ..paths import build_result_paths
+from ..source_ingest import SourceIngestError, prepare_source
+from .review_store import ReviewError, normalize_uploaded_image
+from .schemas import PipelineRunRequest, STAGES, STAGE_LABELS
+from .services import compute_plan, export_approved_deck, generate_image_candidates
+
+router = APIRouter()
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi"}
+MAX_UPLOAD = 8 * 1024 * 1024 * 1024
+
+
+def _csrf(request: Request) -> str:
+    token = request.cookies.get("anki_csrf")
+    return token if token and len(token) == 43 else secrets.token_urlsafe(32)
+
+
+def _check_csrf(request: Request, token: str) -> None:
+    cookie = request.cookies.get("anki_csrf")
+    if not cookie or not secrets.compare_digest(cookie, token):
+        raise HTTPException(403, "Недействительный токен формы.")
+
+
+def _render(request: Request, name: str, context: dict[str, Any], status: int = 200) -> HTMLResponse:
+    token = _csrf(request)
+    response = templates.TemplateResponse(request=request, name=name, context={**context, "csrf": token}, status_code=status)
+    response.set_cookie("anki_csrf", token, httponly=True, samesite="strict")
+    return response
+
+
+def _job(request: Request, job_id: str):
+    try:
+        return request.app.state.jobs.get(job_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Задача не найдена.") from exc
+
+
+def _safe_output(state: Any, root: Path) -> Path:
+    output = Path(state.output_directory).resolve()
+    allowed = (root / "output").resolve()
+    if not output.is_relative_to(allowed):
+        raise HTTPException(403, "Недопустимый проект.")
+    return output
+
+
+@router.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    root = request.app.state.root
+    projects = []
+    output_root = root / "output"
+    for directory in output_root.iterdir() if output_root.exists() else []:
+        if not directory.is_dir() or not any((directory / name).exists() for name in ("transcript.json", "card_candidates.json", "approved_cards.json")):
+            continue
+        review = None
+        try:
+            review = json.loads((directory / "approved_cards.json").read_text(encoding="utf-8")) if (directory / "approved_cards.json").exists() else None
+        except (OSError, json.JSONDecodeError):
+            pass
+        projects.append({"name": directory.name, "modified": directory.stat().st_mtime, "review": review and review.get("status"), "deck": any(directory.glob("*.apkg"))})
+    return _render(request, "index.html", {"stages": STAGE_LABELS, "projects": projects})
+
+
+async def _save_upload(upload: UploadFile, root: Path) -> Path:
+    original = Path(upload.filename or "").name
+    suffix = Path(original).suffix.lower()
+    if suffix not in VIDEO_EXTENSIONS:
+        raise ValueError("Разрешены только MP4, MKV, WebM, MOV, M4V и AVI.")
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(original).stem).strip("-")[:60] or "video"
+    directory = root / "input" / "uploads" / uuid.uuid4().hex
+    directory.mkdir(parents=True, exist_ok=False)
+    destination = directory / f"{stem}{suffix}"
+    fd, temporary = tempfile.mkstemp(prefix=".upload-", dir=directory)
+    size = 0
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            while chunk := await upload.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD:
+                    raise ValueError("Видео превышает лимит 8 ГБ.")
+                stream.write(chunk)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+    finally:
+        await upload.close()
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return destination
+
+
+@router.post("/jobs")
+async def create_job(
+    request: Request, csrf: Annotated[str, Form()], youtube_url: Annotated[str, Form()] = "",
+    video_file: Annotated[UploadFile | None, File()] = None,
+    stages: Annotated[list[str] | None, Form()] = None,
+    model: Annotated[str, Form()] = "small", device: Annotated[str, Form()] = "auto",
+    language: Annotated[str, Form()] = "", target_language: Annotated[str, Form()] = "ja",
+    ollama_model: Annotated[str, Form()] = "qwen3:8b", ollama_url: Annotated[str, Form()] = "http://localhost:11434",
+    ollama_timeout: Annotated[float, Form()] = 120.0, frames_per_card: Annotated[int, Form()] = 5,
+    image_policy: Annotated[str, Form()] = "auto", force: Annotated[bool, Form()] = False,
+):
+    _check_csrf(request, csrf)
+    has_file = bool(video_file and video_file.filename)
+    if bool(youtube_url.strip()) == has_file:
+        return _render(request, "error.html", {"message": "Укажите ровно один источник: YouTube URL или видеофайл."}, 422)
+    try:
+        if has_file:
+            video = await _save_upload(video_file, request.app.state.root)  # type: ignore[arg-type]
+            prepared = prepare_source(video)
+        else:
+            prepared = prepare_source(youtube_url.strip())
+        selected = list(stages or [])
+        if not selected:
+            raise ValueError("Выберите хотя бы одну стадию.")
+        paths = build_result_paths(prepared.video_path)
+        plan = compute_plan(selected, paths.directory)
+        job = request.app.state.jobs.submit(PipelineRunRequest(
+            video_path=prepared.video_path, source=prepared.source, stages=plan,
+            model=model, device=device, language=language or None, force=force,
+            ollama_model=ollama_model, ollama_url=ollama_url, ollama_timeout=ollama_timeout,
+            target_language=target_language, frames_per_card=frames_per_card, image_policy=image_policy,
+        ))
+    except (ValueError, SourceIngestError) as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{job.job_id}", 303)
+
+
+@router.get("/jobs/{job_id}", response_class=HTMLResponse)
+def job_page(request: Request, job_id: str):
+    state = _job(request, job_id)
+    return _render(request, "job.html", {"job": state, "labels": STAGE_LABELS})
+
+
+@router.get("/jobs/{job_id}/events")
+async def events(request: Request, job_id: str):
+    async def stream():
+        last = None
+        while True:
+            state = _job(request, job_id)
+            payload = json.dumps(request.app.state.jobs.public(state), ensure_ascii=False)
+            if payload != last:
+                yield f"data: {payload}\n\n"
+                last = payload
+            if state.status in {"awaiting_review", "completed", "failed", "cancelled"}:
+                break
+            await asyncio.sleep(1)
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.get("/jobs/{job_id}/review", response_class=HTMLResponse)
+def review_page(request: Request, job_id: str):
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    try:
+        review = request.app.state.reviews.load_or_create(output)
+        automatic = json.loads((output / "card_candidates.json").read_text(encoding="utf-8"))
+    except (ReviewError, OSError, json.JSONDecodeError) as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    raw = {item["card_id"]: item for item in automatic["card_candidates"]}
+    cards = []
+    for card in review["cards"]:
+        candidate_file = output / "media_candidates" / card["card_id"] / "candidates.json"
+        try:
+            alternatives = json.loads(candidate_file.read_text(encoding="utf-8")).get("candidates", [])
+        except (OSError, json.JSONDecodeError):
+            alternatives = []
+        cards.append({**card, "meta": raw.get(card["card_id"], {}), "alternatives": alternatives})
+    summary = {"total": len(cards), "included": sum(c["included"] for c in cards), "reviewed": sum(c["reviewed"] for c in cards), "no_image": sum((c.get("image") or {}).get("mode") == "none" for c in cards)}
+    return _render(request, "review.html", {"job": state, "review": review, "cards": cards, "summary": summary})
+
+
+@router.post("/jobs/{job_id}/review/cards/{card_id}", response_class=HTMLResponse)
+def save_card(
+    request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()],
+    included: Annotated[bool, Form()] = False, front: Annotated[str, Form()] = "",
+    back: Annotated[str, Form()] = "", extra: Annotated[str, Form()] = "",
+    tags: Annotated[str, Form()] = "", difficulty: Annotated[int, Form()] = 1,
+    importance: Annotated[int, Form()] = 1,
+):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    try:
+        card = request.app.state.reviews.save_card(_safe_output(state, request.app.state.root), card_id, {
+            "included": included, "front": front, "back": back, "extra": extra,
+            "tags": [tag.strip() for tag in tags.split(",") if tag.strip()],
+            "difficulty": difficulty, "importance": importance,
+        })
+    except ReviewError as exc:
+        return HTMLResponse(f'<span class="error">{str(exc)}</span>', 422)
+    return HTMLResponse('<span class="saved">Сохранено · review снова draft</span>')
+
+
+@router.post("/jobs/{job_id}/review/cards/{card_id}/image-remove")
+def remove_image(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()]):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    request.app.state.reviews.save_card(_safe_output(state, request.app.state.root), card_id, {"image": {"mode": "none"}})
+    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+
+
+@router.post("/jobs/{job_id}/review/cards/{card_id}/image-candidates")
+def image_candidates(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()]):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    try:
+        generate_image_candidates(Path(state.video_path), output, card_id)
+    except Exception as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+
+
+@router.post("/jobs/{job_id}/review/cards/{card_id}/image-select")
+def select_image(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()], path: Annotated[str, Form()], timestamp: Annotated[float, Form()] = 0.0):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    candidate = Path(path)
+    expected = (output / "media_candidates" / card_id).resolve()
+    resolved = (output / candidate).resolve()
+    if candidate.is_absolute() or not resolved.is_relative_to(expected) or not resolved.is_file():
+        raise HTTPException(422, "Недопустимый кадр.")
+    request.app.state.reviews.save_card(output, card_id, {"image": {"mode": "selected_candidate", "path": candidate.as_posix(), "timestamp": timestamp}})
+    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+
+
+@router.post("/jobs/{job_id}/review/cards/{card_id}/image-upload")
+async def upload_image(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()], image: Annotated[UploadFile, File()]):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    data = await image.read(10 * 1024 * 1024 + 1)
+    destination = output / "review_media" / card_id / "uploaded.jpg"
+    try:
+        normalize_uploaded_image(data, destination)
+        relative = destination.relative_to(output).as_posix()
+        request.app.state.reviews.save_card(output, card_id, {"image": {"mode": "uploaded", "path": relative, "timestamp": 0.0}})
+    except ReviewError as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+
+
+@router.post("/jobs/{job_id}/review/approve")
+def approve(request: Request, job_id: str, csrf: Annotated[str, Form()]):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    try:
+        request.app.state.reviews.approve(_safe_output(state, request.app.state.root))
+    except ReviewError as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{job_id}/review", 303)
+
+
+@router.post("/jobs/{job_id}/export")
+def export(request: Request, job_id: str, csrf: Annotated[str, Form()]):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    try:
+        deck = export_approved_deck(Path(state.video_path))
+    except Exception as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    state.status = "completed"
+    return RedirectResponse(f"/jobs/{job_id}/deck", 303)
+
+
+@router.get("/jobs/{job_id}/deck")
+def deck(request: Request, job_id: str):
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    matches = list(output.glob("*.apkg"))
+    if len(matches) != 1:
+        raise HTTPException(404, "Колода не найдена.")
+    return FileResponse(matches[0], filename=matches[0].name)
+
+
+@router.get("/jobs/{job_id}/media/{card_id}")
+def media(request: Request, job_id: str, card_id: str):
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    review = request.app.state.reviews.load_or_create(output)
+    card = next((item for item in review["cards"] if item["card_id"] == card_id), None)
+    image = card and card.get("image")
+    if not image or image.get("mode") == "none":
+        raise HTTPException(404)
+    path = (output / image["path"]).resolve()
+    if not path.is_relative_to(output) or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path)
+
+
+@router.get("/jobs/{job_id}/video")
+def video(request: Request, job_id: str):
+    state = _job(request, job_id)
+    path = Path(state.video_path).resolve()
+    roots = [(request.app.state.root / name).resolve() for name in ("input",)]
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise HTTPException(403)
+    return FileResponse(path)

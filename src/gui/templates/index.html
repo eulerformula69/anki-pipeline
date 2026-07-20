@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Новый проект · anki-pipeline{% endblock %}
+{% block content %}
+<section class="panel hero">
+  <p class="eyebrow">НОВЫЙ ПРОЕКТ</p>
+  <h1>Превратите видео в проверенные карточки</h1>
+  <p>Конвейер подготовит материалы. Колода создаётся только после вашей ручной проверки.</p>
+</section>
+<form class="panel" method="post" action="/jobs" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>1. Источник</h2>
+  <div class="source-grid">
+    <label>YouTube URL<input type="url" name="youtube_url" placeholder="https://www.youtube.com/watch?v=..."></label>
+    <div class="or">или</div>
+    <label>Выбрать видеофайл<input type="file" name="video_file" accept="video/*,.mkv"></label>
+  </div>
+  <h2>2. Стадии</h2>
+  <p class="hint">Зависимости будут добавлены в вычисленный план автоматически.</p>
+  <div class="stage-grid">
+  {% for key, label in stages.items() %}
+    <label class="check"><input type="checkbox" name="stages" value="{{ key }}" {% if key in ['transcription','semantic_segmentation','knowledge_extraction','knowledge_review','card_generation','frame_extraction'] %}checked{% endif %}> <span>{{ label }}</span></label>
+  {% endfor %}
+  </div>
+  <details><summary>Дополнительные параметры</summary>
+    <div class="fields">
+      <label>Основной язык<input name="language" placeholder="auto"></label>
+      <label>Изучаемый язык<input name="target_language" value="ja"></label>
+      <label>Whisper model<input name="model" value="small"></label>
+      <label>Device<select name="device"><option>auto</option><option>cuda</option><option>cpu</option></select></label>
+      <label>Ollama model<input name="ollama_model" value="qwen3:8b"></label>
+      <label>Ollama URL<input name="ollama_url" value="http://localhost:11434"></label>
+      <label>Ollama timeout<input type="number" name="ollama_timeout" value="120"></label>
+      <label>Frames per card<input type="number" min="1" max="20" name="frames_per_card" value="5"></label>
+      <label>Image policy<select name="image_policy"><option>auto</option><option>always</option><option>never</option></select></label>
+      <label class="check"><input type="checkbox" name="force" value="true"> Force</label>
+    </div>
+  </details>
+  <button class="primary" type="submit">Запустить конвейер</button>
+  <p class="safety">Эта кнопка никогда не создаёт .apkg</p>
+</form>
+{% if projects %}<section class="panel"><h2>Существующие проекты</h2><div class="project-list">
+{% for project in projects %}<article><strong>{{ project.name }}</strong><span>Review: {{ project.review or 'не создан' }}</span><span>Колода: {{ 'есть' if project.deck else 'нет' }}</span></article>{% endfor %}
+</div></section>{% endif %}
+{% endblock %}

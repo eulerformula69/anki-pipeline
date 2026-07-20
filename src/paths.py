@@ -26,6 +26,11 @@ class ResultPaths:
     media_directory: Path
     anki_deck: Path
     anki_export_manifest_json: Path
+    approved_cards_json: Path
+    gui_job_json: Path
+    gui_log: Path
+    review_media_directory: Path
+    media_candidates_directory: Path
 
 
 def build_result_paths(video: Path, output_root: Path = Path("output")) -> ResultPaths:
@@ -51,4 +56,9 @@ def build_result_paths(video: Path, output_root: Path = Path("output")) -> Resul
         media_directory=directory / "media",
         anki_deck=directory / f"{video.stem}.apkg",
         anki_export_manifest_json=directory / "anki_export_manifest.json",
+        approved_cards_json=directory / "approved_cards.json",
+        gui_job_json=directory / "gui_job.json",
+        gui_log=directory / "gui.log",
+        review_media_directory=directory / "review_media",
+        media_candidates_directory=directory / "media_candidates",
     )

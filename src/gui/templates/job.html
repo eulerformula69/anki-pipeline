@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">ЗАДАЧА {{ job.job_id[:8] }}</p><h1>{{ job.source }}</h1>
+  <div class="status"><span id="status">{{ job.status }}</span><span id="message">{{ job.progress_message }}</span></div>
+  <ol id="stages">{% for stage in job.stages %}<li data-stage="{{ stage }}">{{ labels.get(stage, stage) }}</li>{% endfor %}</ol>
+  <p id="error" class="error">{{ job.error or '' }}</p>
+  <a id="review-link" class="primary {% if job.status != 'awaiting_review' %}hidden{% endif %}" href="/jobs/{{ job.job_id }}/review">Перейти к ручной проверке</a>
+</section>
+<script>
+const stream = new EventSource('/jobs/{{ job.job_id }}/events');
+stream.onmessage = ({data}) => { const j=JSON.parse(data); status.textContent=j.status; message.textContent=j.progress_message; error.textContent=j.error||'';
+ document.querySelectorAll('[data-stage]').forEach(el=>{if(j.completed_stages.includes(el.dataset.stage))el.className='done';else if(j.current_stage===el.dataset.stage)el.className='active'});
+ if(j.status==='awaiting_review'){document.querySelector('#review-link').classList.remove('hidden');stream.close()} if(['failed','completed','cancelled'].includes(j.status))stream.close(); };
+</script>
+{% endblock %}

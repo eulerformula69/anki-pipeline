@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}anki-pipeline{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script defer src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <header><a href="/">anki-pipeline</a><span>Локальная мастерская карточек</span></header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>
