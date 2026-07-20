@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -51,6 +52,19 @@ def _status_code(exc: BaseException) -> int | None:
         value = getattr(candidate, "status_code", None) or getattr(candidate, "code", None)
         if isinstance(value, int):
             return value
+    return None
+
+
+def _retry_delay_seconds(exc: BaseException) -> float | None:
+    """Extract Google's RetryInfo without exposing the full API error."""
+    message = str(exc)
+    matches = (
+        re.search(r"retry in\s+([0-9]+(?:\.[0-9]+)?)s", message, re.IGNORECASE),
+        re.search(r"['\"]retryDelay['\"]:\s*['\"]([0-9]+(?:\.[0-9]+)?)s", message),
+    )
+    for match in matches:
+        if match:
+            return float(match.group(1))
     return None
 
 
@@ -128,10 +142,25 @@ class GeminiProvider:
             except Exception as exc:
                 code = _status_code(exc)
                 message = str(exc).lower()
+                retry_delay = _retry_delay_seconds(exc)
+                minute_rate_limit = code == 429 and (
+                    retry_delay is not None
+                    or "requestsperminute" in message
+                    or "per minute" in message
+                )
+                if minute_rate_limit and attempt < self.max_retries:
+                    self.sleep((retry_delay or min(60.0, 2**attempt)) + random.random() * 0.1)
+                    continue
+                if minute_rate_limit:
+                    raise LLMError(
+                        "Gemini per-minute rate limit remained active after retries. "
+                        "Wait a minute and restart the failed stage."
+                    ) from exc
                 if code == 429 and ("quota" in message or "resource_exhausted" in message):
                     raise LLMError(
-                        "Gemini API quota exceeded. The project may have reached its free-tier limit. "
-                        "Try again later, select Ollama, or choose another Gemini model."
+                        "Gemini API quota exceeded. The project may have reached its free-tier limit, "
+                        "or the per-minute rate limit remained active after retries. Try again later, "
+                        "select Ollama, or choose another Gemini model."
                     ) from exc
                 transient = code in {429, 500, 502, 503, 504} or code is None and any(
                     word in message for word in ("timeout", "timed out", "connection", "network")

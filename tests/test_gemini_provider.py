@@ -107,3 +107,32 @@ def test_quota_message_and_input_limit(monkeypatch) -> None:
     value.max_input_chars = 2
     with pytest.raises(LLMError, match="too large"):
         value.generate_json("long", schema={"type": "object"})
+
+
+def test_per_minute_quota_honors_google_retry_delay(monkeypatch) -> None:
+    delays = []
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-value")
+    models = Models([
+        APIError(429, "GenerateRequestsPerMinute: Please retry in 32.5s."),
+        "{}",
+    ])
+    value = GeminiProvider(
+        "gemini-test",
+        client_factory=lambda: SimpleNamespace(models=models),
+        sleep=delays.append,
+        max_retries=1,
+    )
+    assert value.generate_json("prompt", schema={"type": "object"})[0] == {}
+    assert len(models.calls) == 2
+    assert 32.5 <= delays[0] < 32.6
+
+
+def test_per_minute_quota_stops_after_retry_budget(monkeypatch) -> None:
+    value, models = provider(
+        monkeypatch,
+        [APIError(429, "GenerateRequestsPerMinute: retry in 1s")],
+        max_retries=0,
+    )
+    with pytest.raises(LLMError, match="per-minute rate limit"):
+        value.generate_json("prompt", schema={"type": "object"})
+    assert len(models.calls) == 1
