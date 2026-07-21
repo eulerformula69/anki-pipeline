@@ -189,5 +189,14 @@ def test_complete_expressions_are_recovered_from_truncated_json() -> None:
     assert recovered == {"expressions": [complete]}
 
 
+def test_punctuation_variants_share_a_stable_id() -> None:
+    plain = "\u3060\u3063\u3066"
+    decorated = "\u301c\u3060\u3063\u3066\u3002"
+
+    assert stable_expression_id("ja", "term", plain) == stable_expression_id(
+        "ja", "term", decorated
+    )
+
+
 def test_wave_dash_does_not_block_native_evidence_match() -> None:
     assert _normalize_native("〜らしい") == _normalize_native("らしい")

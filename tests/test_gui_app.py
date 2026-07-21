@@ -33,3 +33,15 @@ def test_review_ui_uses_candidate_thumbnails_and_non_sticky_toolbar():
     assert 'name="global_tags"' in export
     assert "confirm(" not in export
     assert 'hx-target="#export-panel"' in export
+
+
+def test_htmx_errors_show_the_server_message_instead_of_claiming_image_failure():
+    from pathlib import Path
+
+    script = (
+        Path(__file__).parents[1] / "src" / "gui" / "static" / "htmx.min.js"
+    ).read_text(encoding="utf-8")
+
+    assert "errorMessage(html)" in script
+    assert "Не удалось выполнить действие" in script
+    assert "Не удалось изменить изображение" not in script

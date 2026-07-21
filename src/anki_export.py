@@ -123,9 +123,10 @@ def load_verified_expressions(
             item = TargetExpression(**raw)
         except (TypeError, KeyError) as exc:
             raise AnkiExportError(f"Некорректное выражение: {exc}") from exc
-        if item.id in result:
-            raise AnkiExportError(f"Повторяющийся expression ID: {item.id}.")
-        if item.verification in {"verified", "transcribed"}:
+        if item.verification not in {"verified", "transcribed"}:
+            continue
+        previous = result.get(item.id)
+        if previous is None or item.confidence > previous.confidence:
             result[item.id] = item
     return result
 

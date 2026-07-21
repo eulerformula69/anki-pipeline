@@ -360,7 +360,9 @@ def extract_target_expressions(
                 break
     merged: dict[tuple[str, str], TargetExpression] = {}
     for expression in all_expressions:
-        key = (expression.type, expression.surface)
+        # Stable IDs ignore punctuation and wave-dash variants. Merge with the
+        # same identity rule so two rows cannot receive the same final ID.
+        key = (expression.type, _normalize_native(expression.surface))
         previous = merged.get(key)
         if previous is None:
             merged[key] = expression
