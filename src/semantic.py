@@ -188,12 +188,41 @@ def parse_proposals(data: dict[str, Any], expected_ids: list[int]) -> list[Propo
             raise SemanticSegmentationError("Блок содержит некорректный список ID.")
         proposals.append(ProposedBlock(title.strip(), summary.strip(), ids))
 
+    proposals = trim_context_ids(proposals, expected_ids)
+
     actual_ids = [item for proposal in proposals for item in proposal.transcript_segment_ids]
     if actual_ids != expected_ids:
         raise SemanticSegmentationError(
             f"Нарушено покрытие ID: ожидалось {expected_ids}, получено {actual_ids}."
         )
     return proposals
+
+
+def trim_context_ids(
+    proposals: list[ProposedBlock], expected_ids: list[int]
+) -> list[ProposedBlock]:
+    """Remove context IDs that the model attached to the result's outer edges."""
+    if not expected_ids:
+        return proposals
+
+    expected = set(expected_ids)
+    trimmed: list[ProposedBlock] = []
+    for proposal in proposals:
+        ids = proposal.transcript_segment_ids
+        start = 0
+        end = len(ids)
+        while start < end and ids[start] not in expected:
+            start += 1
+        while end > start and ids[end - 1] not in expected:
+            end -= 1
+        core_ids = ids[start:end]
+        if any(item not in expected for item in core_ids):
+            continue
+        if core_ids:
+            trimmed.append(
+                ProposedBlock(proposal.title, proposal.summary, core_ids)
+            )
+    return trimmed
 
 
 def merge_adjacent_blocks(blocks: list[ProposedBlock]) -> list[ProposedBlock]:

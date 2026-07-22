@@ -48,6 +48,42 @@ def test_duplicate_ids_are_rejected() -> None:
         parse_proposals(data, [0, 1, 2])
 
 
+def test_context_ids_at_outer_edges_are_trimmed() -> None:
+    data = {
+        "segments": [
+            {
+                "title": "Previous context",
+                "summary": "Context only",
+                "transcript_segment_ids": [8, 9],
+            },
+            {
+                "title": "Core topic",
+                "summary": "Core with context attached",
+                "transcript_segment_ids": [10, 11, 12, 13, 14],
+            },
+        ]
+    }
+
+    proposals = parse_proposals(data, [10, 11, 12])
+
+    assert [proposal.transcript_segment_ids for proposal in proposals] == [[10, 11, 12]]
+
+
+def test_context_id_between_core_ids_is_rejected() -> None:
+    data = {
+        "segments": [
+            {
+                "title": "Topic",
+                "summary": "Invalid interleaving",
+                "transcript_segment_ids": [10, 99, 11, 12],
+            }
+        ]
+    }
+
+    with pytest.raises(SemanticSegmentationError, match="покрытие ID"):
+        parse_proposals(data, [10, 11, 12])
+
+
 def test_assemble_text_and_timestamps_from_original_segments() -> None:
     result = assemble_result(
         "video.webm",
