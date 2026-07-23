@@ -71,6 +71,36 @@ def test_stale_card_with_removed_media_no_longer_blocks_review(tmp_path):
     assert stale["image"] == {"mode": "none"}
 
 
+def test_regeneration_refreshes_only_untouched_review_cards(tmp_path):
+    output = project(tmp_path)
+    store = ReviewStore()
+    store.load_or_create(output)
+
+    candidates = json.loads(
+        (output / "card_candidates.json").read_text(encoding="utf-8")
+    )
+    candidates["card_candidates"][0]["front"] = "Regenerated question"
+    (output / "card_candidates.json").write_text(
+        json.dumps(candidates),
+        encoding="utf-8",
+    )
+
+    refreshed = store.load_or_create(output)
+
+    assert refreshed["cards"][0]["front"] == "Regenerated question"
+
+    store.save_card(output, "c_1", {"front": "Manual question"})
+    candidates["card_candidates"][0]["front"] = "Another generated question"
+    (output / "card_candidates.json").write_text(
+        json.dumps(candidates),
+        encoding="utf-8",
+    )
+
+    preserved = store.load_or_create(output)
+
+    assert preserved["cards"][0]["front"] == "Manual question"
+
+
 def test_image_action_returns_only_media_fragment_without_page_reload(tmp_path):
     output = tmp_path / "output" / "video"
     output.mkdir(parents=True, exist_ok=True)

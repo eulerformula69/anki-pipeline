@@ -30,6 +30,71 @@
       "surface": "これからもよろしくお願いします",
       "reading": "これからもよろしくおねがいします",
       "type": "example_sentence"
+    },
+    {
+      "romanization": "yoda",
+      "surface": "ようだ",
+      "reading": "ようだ",
+      "meaning": "похож; словно",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "yona",
+      "surface": "ような",
+      "reading": "ような",
+      "meaning": "подобный; такой как",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "yoni",
+      "surface": "ように",
+      "reading": "ように",
+      "meaning": "подобно; словно",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "soda",
+      "surface": "そうだ",
+      "reading": "そうだ",
+      "meaning": "кажется; выглядит так, будто",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "rahashi",
+      "surface": "らしい",
+      "reading": "らしい",
+      "meaning": "похожий; типичный",
+      "aliases": ["rashii", "rashi", "dashi"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "marude",
+      "surface": "まるで",
+      "reading": "まるで",
+      "meaning": "словно; совершенно как",
+      "type": "term"
+    },
+    {
+      "romanization": "mitai",
+      "surface": "みたい",
+      "reading": "みたい",
+      "meaning": "похож; словно, разговорная форма",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "ka",
+      "surface": "か",
+      "reading": "か",
+      "meaning": "вопросительная частица",
+      "aliases": ["car"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "yo",
+      "surface": "よう",
+      "reading": "よう",
+      "meaning": "форма; подобие",
+      "type": "term"
     }
   ]
 }

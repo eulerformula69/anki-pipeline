@@ -55,10 +55,26 @@ class ReviewStore:
             self._unique_ids(raw_cards)
             if approved.exists():
                 review = self._read(approved)
-                known = {card.get("card_id") for card in review.get("cards", [])}
+                reviewed_by_id = {
+                    card.get("card_id"): card
+                    for card in review.get("cards", [])
+                }
                 for raw in raw_cards:
-                    if raw["card_id"] not in known:
+                    existing = reviewed_by_id.get(raw["card_id"])
+                    if existing is None:
                         review["cards"].append(self._draft_card(raw, output))
+                        continue
+                    if existing.get("changed") or existing.get("reviewed"):
+                        continue
+                    for field in (
+                        "front",
+                        "back",
+                        "extra",
+                        "tags",
+                        "difficulty",
+                        "importance",
+                    ):
+                        existing[field] = deepcopy(raw.get(field, existing.get(field)))
                 current = {raw["card_id"] for raw in raw_cards}
                 repaired_stale = False
                 for card in review["cards"]:

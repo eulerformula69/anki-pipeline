@@ -59,6 +59,9 @@ def enforce_content_quality(
             reason="Мета-контент видео, не являющийся учебным знанием.",
         )
 
+    if item.type in {"comparison", "process"}:
+        return review
+
     issues = atomicity_issues(item.statement)
     if not issues:
         return review

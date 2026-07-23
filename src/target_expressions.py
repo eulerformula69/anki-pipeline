@@ -204,6 +204,11 @@ def parse_response(
             ),
             confidence=float(confidence),
             type=expression_type,
+            romanization_aliases=(
+                [str(alias) for alias in glossary_entry.get("aliases", [])]
+                if glossary_entry
+                else None
+            ),
         ))
     if errors and not result:
         raise TargetExpressionError(" | ".join(errors))
@@ -244,6 +249,70 @@ def romanization_matches_primary(romanization: str, primary: str) -> bool:
     )
 
 
+def glossary_expressions_from_transcript(
+    segments: list[TranscriptSegment],
+    glossary: dict[str, dict[str, str]],
+    items: list,
+    *,
+    language: str,
+) -> list[TargetExpression]:
+    result: list[TargetExpression] = []
+    for romanization, entry in glossary.items():
+        tokenized_spellings = [
+            re.findall(r"[a-z]+", spelling.casefold())
+            for spelling in [
+                romanization,
+                *(str(alias) for alias in entry.get("aliases", [])),
+            ]
+        ]
+        tokenized_spellings = [tokens for tokens in tokenized_spellings if tokens]
+        if not tokenized_spellings:
+            continue
+        source_ids = [
+            segment.id
+            for segment in segments
+            if any(
+                any(
+                    segment_tokens[start:start + len(spelling_tokens)]
+                    == spelling_tokens
+                    for start in range(
+                        max(
+                            0,
+                            len(segment_tokens) - len(spelling_tokens) + 1,
+                        )
+                    )
+                )
+                for spelling_tokens in tokenized_spellings
+                for segment_tokens in [
+                    re.findall(r"[a-z]+", segment.text.casefold())
+                ]
+            )
+        ]
+        if not source_ids:
+            continue
+        result.append(TargetExpression(
+            id="",
+            language=language,
+            surface=str(entry["surface"]),
+            reading=str(entry.get("reading", entry["surface"])),
+            romanization=romanization,
+            meaning=str(entry.get("meaning", romanization)),
+            knowledge_ids=[
+                item.id
+                for item in items
+                if set(item.source_transcript_segment_ids) & set(source_ids)
+            ],
+            source_transcript_segment_ids=source_ids,
+            verification="verified",
+            confidence=1.0,
+            type=str(entry.get("type", "term")),
+            romanization_aliases=[
+                str(alias) for alias in entry.get("aliases", [])
+            ] or None,
+        ))
+    return result
+
+
 def load_native_evidence(path: Path | None) -> dict[int, list[str]]:
     if path is None or not path.exists():
         return {}
@@ -279,7 +348,12 @@ def extract_target_expressions(
     glossary = load_glossary(glossary_path)
     native_evidence = load_native_evidence(target_transcript_path)
     primary_evidence = {segment.id: segment.text for segment in transcript_segments}
-    all_expressions: list[TargetExpression] = []
+    all_expressions = glossary_expressions_from_transcript(
+        transcript_segments,
+        glossary,
+        items,
+        language=target_language,
+    )
     window_size, overlap = 12, 2
     starts = range(0, len(transcript_segments), window_size - overlap)
     windows = [transcript_segments[start:start + window_size] for start in starts]
@@ -371,7 +445,16 @@ def extract_target_expressions(
                 **{**previous.__dict__,
                    "knowledge_ids": list(dict.fromkeys(previous.knowledge_ids + expression.knowledge_ids)),
                    "source_transcript_segment_ids": sorted(set(previous.source_transcript_segment_ids + expression.source_transcript_segment_ids)),
-                   "confidence": max(previous.confidence, expression.confidence)}
+                   "confidence": max(previous.confidence, expression.confidence),
+                   "romanization_aliases": list(dict.fromkeys(
+                       (previous.romanization_aliases or [])
+                       + (expression.romanization_aliases or [])
+                       + (
+                           [expression.romanization]
+                           if expression.romanization != previous.romanization
+                           else []
+                       )
+                   )) or None}
             )
     expressions = [
         TargetExpression(**{

@@ -283,6 +283,24 @@ def test_verified_term_is_replaced_globally() -> None:
     assert result.expression_ids == []
 
 
+def test_verified_romanization_alias_is_replaced_globally() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(
+        ["k_0001"], "basic", "What does car mark?", "Car marks a question.", "", 2
+    )
+    term = TargetExpression(
+        "e_ka", "ja", "か", "か", "ka", "question marker",
+        ["k_other"], [99], "verified", 1.0, "grammar_pattern", ["car"],
+    )
+
+    result = proposal_to_candidate(
+        proposal, {items[0].id: items[0]}, {}, [term]
+    )
+
+    assert result.front == "What does か mark?"
+    assert result.back == "か marks a question."
+
+
 def test_suffix_spelling_variant_is_replaced_without_example_prefix() -> None:
     items = knowledge_items()[:1]
     proposal = CardProposal(

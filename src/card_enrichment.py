@@ -92,20 +92,31 @@ def localize_card_text(
         prefix = f"{expression.surface} — "
         if front.startswith(prefix):
             front = front[len(prefix):]
-    for expression in sorted(
-        replacement_expressions, key=lambda item: len(item.romanization), reverse=True
+    replacements = [
+        (expression, spelling)
+        for expression in replacement_expressions
+        if expression.type != "example_sentence"
+        for spelling in [
+            expression.romanization,
+            *(expression.romanization_aliases or []),
+        ]
+        if spelling
+    ]
+    for expression, spelling in sorted(
+        replacements,
+        key=lambda item: len(item[1]),
+        reverse=True,
     ):
-        if expression.romanization and expression.type != "example_sentence":
-            romanization = expression.romanization.strip(" ~〜～-")
-            escaped = re.escape(romanization)
-            if romanization.casefold().endswith("ii"):
-                escaped = re.escape(romanization[:-1]) + "i?"
-            pattern = re.compile(
-                rf"(?<![A-Za-z])[-~〜～]?\s*{escaped}(?![A-Za-z])",
-                re.IGNORECASE,
-            )
-            front = pattern.sub(expression.surface, front)
-            back = pattern.sub(expression.surface, back)
+        romanization = spelling.strip(" ~〜～-")
+        escaped = re.escape(romanization)
+        if romanization.casefold().endswith("ii"):
+            escaped = re.escape(romanization[:-1]) + "i?"
+        pattern = re.compile(
+            rf"(?<![A-Za-z])[-~〜～]?\s*{escaped}(?![A-Za-z])",
+            re.IGNORECASE,
+        )
+        front = pattern.sub(expression.surface, front)
+        back = pattern.sub(expression.surface, back)
     if expressions:
         labels = [
             f"{item.surface} [{item.reading}] ({item.romanization})"

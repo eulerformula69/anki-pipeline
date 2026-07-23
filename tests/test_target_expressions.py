@@ -2,10 +2,11 @@ import json
 
 import pytest
 
-from src.models import KnowledgeItem
+from src.models import KnowledgeItem, TranscriptSegment
 from src.target_expressions import (
     TargetExpressionError,
     extract_target_expressions,
+    glossary_expressions_from_transcript,
     load_glossary,
     parse_response,
     recover_partial_expressions,
@@ -200,3 +201,63 @@ def test_punctuation_variants_share_a_stable_id() -> None:
 
 def test_wave_dash_does_not_block_native_evidence_match() -> None:
     assert _normalize_native("〜らしい") == _normalize_native("らしい")
+
+
+def test_glossary_recovers_known_expression_without_llm_output() -> None:
+    segments = [
+        TranscriptSegment(
+            id=7,
+            start=1.0,
+            end=2.0,
+            text="Yoda is used for a simile.",
+        )
+    ]
+    glossary = {
+        "yoda": {
+            "surface": "ようだ",
+            "reading": "ようだ",
+            "meaning": "similar to",
+            "type": "grammar_pattern",
+            "aliases": ["yohda"],
+        }
+    }
+
+    result = glossary_expressions_from_transcript(
+        segments,
+        glossary,
+        [],
+        language="ja",
+    )
+
+    assert len(result) == 1
+    assert result[0].surface == "ようだ"
+    assert result[0].verification == "verified"
+    assert result[0].source_transcript_segment_ids == [7]
+    assert result[0].romanization_aliases == ["yohda"]
+
+
+def test_glossary_does_not_match_inside_an_english_word() -> None:
+    segments = [
+        TranscriptSegment(
+            id=7,
+            start=1.0,
+            end=2.0,
+            text="You can compare these forms.",
+        )
+    ]
+    glossary = {
+        "ka": {
+            "surface": "か",
+            "reading": "か",
+            "type": "grammar_pattern",
+        }
+    }
+
+    result = glossary_expressions_from_transcript(
+        segments,
+        glossary,
+        [],
+        language="ja",
+    )
+
+    assert result == []

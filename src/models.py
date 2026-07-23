@@ -144,6 +144,7 @@ class TargetExpression:
     verification: str
     confidence: float
     type: str = "term"
+    romanization_aliases: list[str] | None = None
 
 
 @dataclass(frozen=True)

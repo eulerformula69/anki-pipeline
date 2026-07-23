@@ -175,6 +175,41 @@ def test_unrelated_semantic_components_are_packed_efficiently() -> None:
     assert sorted(len(group) for group in groups) == [1, 12]
 
 
+def test_review_output_restores_original_knowledge_order(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    knowledge_path = write_knowledge(tmp_path)
+    source = json.loads(knowledge_path.read_text(encoding="utf-8"))
+    source["knowledge_items"].append(items()[2].to_dict())
+    knowledge_path.write_text(json.dumps(source), encoding="utf-8")
+    reordered = [[items()[2]], items()[:2]]
+    monkeypatch.setattr("src.review.group_knowledge_items", lambda *args, **kwargs: reordered)
+    responses = [
+        ({"reviews": [review_item("k_0003")]}, "third"),
+        ({
+            "reviews": [
+                review_item("k_0001"),
+                review_item("k_0002"),
+            ]
+        }, "first two"),
+    ]
+
+    result = review_knowledge(
+        knowledge_path,
+        tmp_path / "review.json",
+        tmp_path / "diagnostic.json",
+        SequenceClient(responses),
+        embedder=FakeEmbedder({}),
+    )
+
+    assert [review.knowledge_id for review in result.reviews] == [
+        "k_0001",
+        "k_0002",
+        "k_0003",
+    ]
+
+
 def test_content_quality_forces_meta_content_to_discard() -> None:
     item = KnowledgeItem(
         "k_0001", 0, "fact", "Thanks for watching and subscribe.", "",
@@ -200,6 +235,19 @@ def test_content_quality_forces_compound_statement_to_split() -> None:
 
     assert result.status == "split"
     assert result.issues == ["contains_two_facts"]
+
+
+def test_atomicity_heuristic_preserves_comparison_as_one_learning_unit() -> None:
+    item = KnowledgeItem(
+        "k_0001", 0, "comparison",
+        "Yoda is subjective, but soda is less subjective and rahashi is between them.",
+        "", 4, [1], "Evidence.",
+    )
+    original = KnowledgeReview("k_0001", "keep", 0.9, [], "none", "Useful.")
+
+    result = enforce_content_quality(item, original)
+
+    assert result.status == "keep"
 
 
 def test_merge_into_discarded_duplicate_becomes_keep() -> None:

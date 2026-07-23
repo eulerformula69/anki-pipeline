@@ -480,6 +480,8 @@ def review_knowledge(
                 )
                 had_fallback = True
                 break
+    reviews_by_id = {review.knowledge_id: review for review in reviews}
+    reviews = [reviews_by_id[item.id] for item in items]
     result = KnowledgeReviewCollection(source, client.model, reviews)
     save_json_atomic(result.to_dict(), destination)
     if not had_fallback:
