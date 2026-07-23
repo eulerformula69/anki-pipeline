@@ -21,6 +21,7 @@ from .llm import (
     generate_structured, provider_label,
 )
 from .progress import ActivityIndicator
+from .prompt_policy import LEARNING_CONTENT_POLICY
 from .semantic import save_json_atomic
 
 LOGGER = logging.getLogger("anki_pipeline.knowledge")
@@ -166,7 +167,9 @@ def build_knowledge_prompt(
         "Пиши statement и explanation на языке исходной транскрипции: "
         f"{result_language}.",
     )
-    return f"""Извлеки атомарные проверяемые учебные знания только из данного блока.
+    return f"""{LEARNING_CONTENT_POLICY}
+
+Извлеки атомарные проверяемые учебные знания только из данного блока.
 Не используй внешние знания и не добавляй отсутствующие сведения.
 Исключи приветствия, рекламу, переходы, повторы, пустые вводные и неучебные мнения.
 Каждый item должен содержать ровно один тезис, не вопрос и не будущую Anki-карточку.

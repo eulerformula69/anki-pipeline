@@ -5,11 +5,19 @@ import pytest
 from src.models import KnowledgeItem, KnowledgeReview
 from src.review import (
     KnowledgeReviewError,
+    build_review_prompt,
     group_knowledge_items,
     normalize_review_relations,
     parse_review_response,
     review_knowledge,
 )
+
+
+def test_review_prompt_discards_non_learning_video_content() -> None:
+    prompt = build_review_prompt([])
+
+    assert "use outside this specific video" in prompt
+    assert "must receive status=discard" in prompt
 
 
 def items() -> list[KnowledgeItem]:

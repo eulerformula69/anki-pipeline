@@ -4,6 +4,7 @@ import pytest
 
 from src.knowledge import (
     KnowledgeExtractionError,
+    build_knowledge_prompt,
     build_evidence,
     deduplicate_items,
     evidence_matches,
@@ -33,6 +34,19 @@ def semantic_segment() -> SemanticSegment:
         transcript_segment_ids=[0, 1],
         text="Yojijukugo are four-character idioms. They can express a complete idea.",
     )
+
+
+def test_prompt_filters_video_meta_and_author_preferences() -> None:
+    prompt = build_knowledge_prompt(
+        semantic_segment(),
+        {item.id: item for item in source_segments()},
+        result_language="en",
+        max_items=5,
+    )
+
+    assert "use outside this specific video" in prompt
+    assert "author's biography, tastes, preferences" in prompt
+    assert "When uncertain, omit the item" in prompt
 
 
 def valid_item(**overrides):

@@ -17,6 +17,7 @@ from .models import (
 from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_structured, provider_label
 from .ollama_schemas import review_response_schema
 from .progress import ActivityIndicator
+from .prompt_policy import LEARNING_CONTENT_POLICY
 from .semantic import save_json_atomic
 
 LOGGER = logging.getLogger("anki_pipeline.review")
@@ -169,7 +170,10 @@ def build_review_prompt(
             + "\n- ".join(errors)
             + "\nВерни весь исправленный JSON заново."
         )
-    return f"""Ты редактор качества учебных знаний, а не генератор новых знаний.
+    return f"""{LEARNING_CONTENT_POLICY}
+Any input item rejected by this filter must receive status=discard.
+
+Ты редактор качества учебных знаний, а не генератор новых знаний.
 Оцени каждый входной knowledge item, ничего в нём не изменяя.
 Найди слишком общие, частные, длинные, неясные, составные, дублирующиеся,
 слабые примеры и знания с низкой учебной ценностью.
