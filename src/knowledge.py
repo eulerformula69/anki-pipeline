@@ -16,6 +16,7 @@ from .models import (
     SemanticSegment,
     TranscriptSegment,
 )
+from .content_quality import atomicity_issues
 from .llm import (
     LLMError, LLMInvalidResponseError, StructuredLLM,
     generate_structured, provider_label,
@@ -23,6 +24,11 @@ from .llm import (
 from .progress import ActivityIndicator
 from .prompt_policy import LEARNING_CONTENT_POLICY
 from .semantic import save_json_atomic
+from .semantic_duplicates import (
+    StatementEmbedder,
+    default_statement_embedder,
+    semantic_duplicate_pairs,
+)
 
 LOGGER = logging.getLogger("anki_pipeline.knowledge")
 
@@ -83,6 +89,7 @@ class KnowledgeProposal:
     explanation: str
     importance: int
     source_transcript_segment_ids: list[int]
+    atomicity_issues: tuple[str, ...] = ()
 
 
 def load_knowledge_sources(
@@ -267,14 +274,16 @@ def parse_knowledge_response(
             if outside:
                 errors.append(prefix + f"ID не принадлежат смысловому блоку: {outside}.")
         if not errors or not any(error.startswith(prefix) for error in errors):
+            normalized_statement = statement.strip()
             proposals.append(
                 KnowledgeProposal(
                     semantic_segment_id=semantic.id,
                     type=item_type,
-                    statement=statement.strip(),
+                    statement=normalized_statement,
                     explanation=explanation.strip(),
                     importance=importance,
                     source_transcript_segment_ids=source_ids,
+                    atomicity_issues=atomicity_issues(normalized_statement),
                 )
             )
     if errors and proposals and all(error.startswith("Item ") for error in errors):
@@ -357,20 +366,36 @@ def statements_are_obvious_duplicates(
 
 
 def deduplicate_items(
-    items: list[KnowledgeItem], transcript_by_id: dict[int, TranscriptSegment]
+    items: list[KnowledgeItem],
+    transcript_by_id: dict[int, TranscriptSegment],
+    *,
+    embedder: StatementEmbedder | None = None,
+    semantic_threshold: float = 0.86,
 ) -> list[KnowledgeItem]:
+    semantic_pairs: set[tuple[int, int]] = set()
+    active_embedder = embedder if embedder is not None else default_statement_embedder()
+    if active_embedder is not None:
+        semantic_pairs = semantic_duplicate_pairs(
+            [item.statement for item in items],
+            active_embedder,
+            threshold=semantic_threshold,
+        )
+
     unique: list[KnowledgeItem] = []
-    for item in items:
+    original_indexes: list[int] = []
+    for item_index, item in enumerate(items):
         duplicate_index = next(
             (
                 index
                 for index, existing in enumerate(unique)
                 if statements_are_obvious_duplicates(existing, item)
+                or (original_indexes[index], item_index) in semantic_pairs
             ),
             None,
         )
         if duplicate_index is None:
             unique.append(item)
+            original_indexes.append(item_index)
             continue
         existing = unique[duplicate_index]
         if existing.semantic_segment_id == item.semantic_segment_id:

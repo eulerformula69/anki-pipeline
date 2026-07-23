@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
+from .content_quality import enforce_content_quality
 from .models import (
     DuplicateOccurrence,
     KnowledgeItem,
@@ -19,6 +23,11 @@ from .ollama_schemas import review_response_schema
 from .progress import ActivityIndicator
 from .prompt_policy import LEARNING_CONTENT_POLICY
 from .semantic import save_json_atomic
+from .semantic_duplicates import (
+    StatementEmbedder,
+    cosine_similarity_matrix,
+    default_statement_embedder,
+)
 
 LOGGER = logging.getLogger("anki_pipeline.review")
 
@@ -144,14 +153,126 @@ def load_knowledge_items(path: Path) -> tuple[str, str, list[KnowledgeItem]]:
     return source, model, items
 
 
+def _semantic_components(
+    similarities: np.ndarray,
+    *,
+    threshold: float,
+) -> list[list[int]]:
+    parents = list(range(len(similarities)))
+
+    def find(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    def union(first: int, second: int) -> None:
+        first_root = find(first)
+        second_root = find(second)
+        if first_root != second_root:
+            parents[second_root] = first_root
+
+    for first in range(len(similarities)):
+        nearest = np.argsort(similarities[first])[::-1][1:7]
+        for second_value in nearest:
+            second = int(second_value)
+            if float(similarities[first, second]) < threshold:
+                break
+            union(first, second)
+
+    components: dict[int, list[int]] = defaultdict(list)
+    for index in range(len(similarities)):
+        components[find(index)].append(index)
+    return list(components.values())
+
+
+def _split_dense_component(
+    indexes: list[int],
+    similarities: np.ndarray,
+    *,
+    max_group_size: int,
+) -> list[list[int]]:
+    groups: list[list[int]] = []
+    remaining = set(indexes)
+    while remaining:
+        center = max(
+            remaining,
+            key=lambda index: sum(
+                float(similarities[index, other])
+                for other in remaining
+                if other != index
+            ),
+        )
+        nearest = sorted(
+            remaining,
+            key=lambda index: float(similarities[center, index]),
+            reverse=True,
+        )[:max_group_size]
+        groups.append(nearest)
+        remaining.difference_update(nearest)
+    return groups
+
+
+def _pack_component_groups(
+    components: list[list[int]],
+    *,
+    max_group_size: int,
+) -> list[list[int]]:
+    packed: list[list[int]] = []
+    for component in sorted(components, key=len, reverse=True):
+        target = next(
+            (
+                group
+                for group in packed
+                if len(group) + len(component) <= max_group_size
+            ),
+            None,
+        )
+        if target is None:
+            packed.append(list(component))
+        else:
+            target.extend(component)
+    return packed
+
+
 def group_knowledge_items(
-    items: list[KnowledgeItem], *, max_group_size: int = 12
+    items: list[KnowledgeItem],
+    *,
+    max_group_size: int = 12,
+    embedder: StatementEmbedder | None = None,
+    neighbor_threshold: float = 0.72,
 ) -> list[list[KnowledgeItem]]:
     if max_group_size < 1:
         raise ValueError("max_group_size должен быть положительным.")
+    if embedder is None or len(items) <= max_group_size:
+        return [
+            items[start:start + max_group_size]
+            for start in range(0, len(items), max_group_size)
+        ]
+
+    similarities = cosine_similarity_matrix(
+        [item.statement for item in items],
+        embedder,
+    )
+    component_groups: list[list[int]] = []
+    for component in _semantic_components(
+        similarities,
+        threshold=neighbor_threshold,
+    ):
+        component_groups.extend(
+            _split_dense_component(
+                component,
+                similarities,
+                max_group_size=max_group_size,
+            )
+        )
+    grouped_indexes = _pack_component_groups(
+        component_groups,
+        max_group_size=max_group_size,
+    )
     return [
-        items[start:start + max_group_size]
-        for start in range(0, len(items), max_group_size)
+        [items[index] for index in indexes]
+        for indexes in grouped_indexes
     ]
 
 
@@ -287,9 +408,13 @@ def review_knowledge(
     destination: Path,
     diagnostic_path: Path,
     client: StructuredLLM,
+    *,
+    embedder: StatementEmbedder | None = None,
 ) -> KnowledgeReviewCollection:
     source, _, items = load_knowledge_items(knowledge_path)
-    groups = group_knowledge_items(items)
+    active_embedder = embedder if embedder is not None else default_statement_embedder()
+    groups = group_knowledge_items(items, embedder=active_embedder)
+    items_by_id = {item.id: item for item in items}
     reviews: list[KnowledgeReview] = []
     had_fallback = False
     for group_number, group in enumerate(groups, start=1):
@@ -309,8 +434,13 @@ def review_knowledge(
                 with ActivityIndicator(label):
                     data, raw = generate_structured(client, prompt, schema=REVIEW_RESPONSE_SCHEMA)
                 responses.append(raw)
+                parsed = parse_review_response(data, expected_ids, raw_response=raw)
                 reviews.extend(
-                    parse_review_response(data, expected_ids, raw_response=raw)
+                    enforce_content_quality(
+                        items_by_id[review.knowledge_id],
+                        review,
+                    )
+                    for review in parsed
                 )
                 break
             except LLMInvalidResponseError as exc:

@@ -451,7 +451,15 @@ def generate_card_candidates(
         )
         for item in proposals
     ]
-    candidates = deduplicate_candidates(candidates)
+    split_knowledge_ids = {
+        review.knowledge_id
+        for review in reviews
+        if review.status == "split"
+    }
+    candidates = deduplicate_candidates(
+        candidates,
+        split_knowledge_ids=split_knowledge_ids,
+    )
     candidates = number_candidates(candidates)
     result = CardCandidateCollection(source, client.model, candidates)
     save_json_atomic(result.to_dict(), destination)

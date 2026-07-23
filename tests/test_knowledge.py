@@ -1,5 +1,6 @@
 import json
 
+import numpy as np
 import pytest
 
 from src.knowledge import (
@@ -289,3 +290,49 @@ def test_distinct_facts_from_same_source_are_preserved() -> None:
     )
 
     assert not statements_are_obvious_duplicates(first, second)
+
+
+class FakeEmbedder:
+    def __init__(self, vectors: dict[str, list[float]]) -> None:
+        self.vectors = vectors
+
+    def encode(self, statements: list[str]) -> np.ndarray:
+        return np.asarray([self.vectors[item] for item in statements], dtype=np.float32)
+
+
+def test_semantic_paraphrases_are_deduplicated_across_video() -> None:
+    transcript = {item.id: item for item in source_segments()}
+    first = KnowledgeItem(
+        "", 0, "fact", "Water freezes at zero Celsius.", "", 4, [0],
+        source_segments()[0].text,
+    )
+    second = KnowledgeItem(
+        "", 1, "fact", "At 0°C water turns into ice.", "", 3, [2],
+        source_segments()[2].text,
+    )
+    embedder = FakeEmbedder({
+        first.statement: [1.0, 0.0],
+        second.statement: [0.99, 0.01],
+    })
+
+    result = deduplicate_items(
+        [first, second],
+        transcript,
+        embedder=embedder,
+    )
+
+    assert len(result) == 1
+    assert result[0].duplicate_occurrences[0].semantic_segment_id == 1
+
+
+def test_parser_marks_non_atomic_statement() -> None:
+    data = valid_item(
+        statement=(
+            "Alpha is first and beta is second, but gamma is third "
+            "and delta is fourth."
+        )
+    )
+
+    proposal = parse(data)[0]
+
+    assert proposal.atomicity_issues == ("multiple_clauses",)

@@ -162,14 +162,34 @@ def proposal_to_candidate(
     )
 
 
-def deduplicate_candidates(candidates: list[CardCandidate]) -> list[CardCandidate]:
+def candidates_share_unsplit_knowledge(
+    first: CardCandidate,
+    second: CardCandidate,
+    *,
+    split_knowledge_ids: set[str],
+) -> bool:
+    shared_ids = set(first.knowledge_ids) & set(second.knowledge_ids)
+    return bool(shared_ids - split_knowledge_ids)
+
+
+def deduplicate_candidates(
+    candidates: list[CardCandidate],
+    *,
+    split_knowledge_ids: set[str] | None = None,
+) -> list[CardCandidate]:
+    split_ids = split_knowledge_ids or set()
     unique: list[CardCandidate] = []
     for candidate in candidates:
         index = next(
             (
                 position
                 for position, existing in enumerate(unique)
-                if candidates_are_duplicates(existing, candidate)
+                if candidates_share_unsplit_knowledge(
+                    existing,
+                    candidate,
+                    split_knowledge_ids=split_ids,
+                )
+                or candidates_are_duplicates(existing, candidate)
             ),
             None,
         )

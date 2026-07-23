@@ -161,6 +161,40 @@ def test_semantically_redundant_cards_are_deduplicated() -> None:
     assert len(deduplicate_candidates([first, second])) == 1
 
 
+def test_shared_unsplit_knowledge_forces_card_merge() -> None:
+    first = CardCandidate(
+        "", ["k1"], "basic", "First wording?", "First answer.", "",
+        3, 4, ["fact"], [1],
+    )
+    second = CardCandidate(
+        "", ["k1", "k2"], "basic", "Unrelated wording?", "Different answer.", "",
+        3, 4, ["fact"], [2],
+    )
+
+    result = deduplicate_candidates([first, second])
+
+    assert len(result) == 1
+    assert result[0].knowledge_ids == ["k1", "k2"]
+
+
+def test_split_knowledge_can_produce_distinct_cards() -> None:
+    first = CardCandidate(
+        "", ["k1"], "basic", "What is alpha?", "Alpha.", "",
+        3, 4, ["fact"], [1],
+    )
+    second = CardCandidate(
+        "", ["k1"], "basic", "What is beta?", "Beta.", "",
+        3, 4, ["fact"], [1],
+    )
+
+    result = deduplicate_candidates(
+        [first, second],
+        split_knowledge_ids={"k1"},
+    )
+
+    assert len(result) == 2
+
+
 def test_merge_source_with_discarded_duplicate_can_generate_one_card() -> None:
     items = [
         KnowledgeItem("k_0013", 0, "fact", "Keep this.", "", 4, [1], "Keep"),

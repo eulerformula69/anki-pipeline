@@ -3,6 +3,7 @@ pytest>=8,<9
 tqdm>=4.66,<5
 Pillow>=10,<12
 numpy>=1.26,<3
+sentence-transformers>=3,<4
 genanki>=0.13.1,<0.14
 yt-dlp>=2025.1,<2027
 fastapi>=0.115,<1

@@ -1,5 +1,6 @@
 import json
 
+import numpy as np
 import pytest
 
 from src.models import KnowledgeItem, KnowledgeReview
@@ -11,6 +12,7 @@ from src.review import (
     parse_review_response,
     review_knowledge,
 )
+from src.content_quality import enforce_content_quality
 
 
 def test_review_prompt_discards_non_learning_video_content() -> None:
@@ -109,6 +111,95 @@ def test_large_collection_is_split_below_common_response_limit() -> None:
     assert [item.id for group in groups for item in group] == [
         item.id for item in many_items
     ]
+
+
+class FakeEmbedder:
+    def __init__(self, vectors: dict[str, list[float]]) -> None:
+        self.vectors = vectors
+
+    def encode(self, statements: list[str]) -> np.ndarray:
+        return np.asarray([self.vectors[item] for item in statements], dtype=np.float32)
+
+
+def test_semantic_grouping_puts_distant_paraphrases_together() -> None:
+    many_items = [
+        KnowledgeItem(
+            f"k_{index:04d}", 0, "fact", f"Fact {index}.", "", 3, [index],
+            "Evidence.",
+        )
+        for index in range(1, 14)
+    ]
+    vectors = {
+        item.statement: [1.0, 0.0] if item.id in {"k_0001", "k_0013"}
+        else [0.0, float(index + 1)]
+        for index, item in enumerate(many_items)
+    }
+
+    groups = group_knowledge_items(
+        many_items,
+        max_group_size=12,
+        embedder=FakeEmbedder(vectors),
+        neighbor_threshold=0.95,
+    )
+
+    assert any(
+        {"k_0001", "k_0013"} <= {item.id for item in group}
+        for group in groups
+    )
+    assert all(len(group) <= 12 for group in groups)
+
+
+def test_unrelated_semantic_components_are_packed_efficiently() -> None:
+    many_items = [
+        KnowledgeItem(
+            f"k_{index:04d}", 0, "fact", f"Fact {index}.", "", 3, [index],
+            "Evidence.",
+        )
+        for index in range(1, 14)
+    ]
+    vectors = {
+        item.statement: [
+            1.0 if dimension == index else 0.0
+            for dimension in range(len(many_items))
+        ]
+        for index, item in enumerate(many_items)
+    }
+
+    groups = group_knowledge_items(
+        many_items,
+        max_group_size=12,
+        embedder=FakeEmbedder(vectors),
+        neighbor_threshold=0.95,
+    )
+
+    assert sorted(len(group) for group in groups) == [1, 12]
+
+
+def test_content_quality_forces_meta_content_to_discard() -> None:
+    item = KnowledgeItem(
+        "k_0001", 0, "fact", "Thanks for watching and subscribe.", "",
+        3, [1], "Thanks.",
+    )
+    original = KnowledgeReview("k_0001", "keep", 0.7, [], "none", "Useful.")
+
+    result = enforce_content_quality(item, original)
+
+    assert result.status == "discard"
+    assert result.recommended_action == "discard"
+
+
+def test_content_quality_forces_compound_statement_to_split() -> None:
+    item = KnowledgeItem(
+        "k_0001", 0, "fact",
+        "Alpha is first and beta is second, but gamma is third and delta is fourth.",
+        "", 3, [1], "Evidence.",
+    )
+    original = KnowledgeReview("k_0001", "keep", 0.7, [], "none", "Useful.")
+
+    result = enforce_content_quality(item, original)
+
+    assert result.status == "split"
+    assert result.issues == ["contains_two_facts"]
 
 
 def test_merge_into_discarded_duplicate_becomes_keep() -> None:
