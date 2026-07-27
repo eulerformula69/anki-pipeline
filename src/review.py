@@ -22,6 +22,11 @@ from .llm import LLMError, LLMInvalidResponseError, StructuredLLM, generate_stru
 from .ollama_schemas import review_response_schema
 from .progress import ActivityIndicator
 from .prompt_policy import LEARNING_CONTENT_POLICY
+from .review_preferences import (
+    ReviewPreferenceHistory,
+    build_review_preference_prompt,
+    load_review_preference_history,
+)
 from .semantic import save_json_atomic
 from .semantic_duplicates import (
     StatementEmbedder,
@@ -281,6 +286,7 @@ def build_review_prompt(
     *,
     previous_response: str | None = None,
     errors: list[str] | None = None,
+    preference_history: ReviewPreferenceHistory | None = None,
 ) -> str:
     payload = [item.to_dict() for item in items]
     correction = ""
@@ -291,6 +297,11 @@ def build_review_prompt(
             + "\n- ".join(errors)
             + "\nВерни весь исправленный JSON заново."
         )
+    preference_prompt = (
+        build_review_preference_prompt(preference_history)
+        if preference_history is not None
+        else ""
+    )
     return f"""{LEARNING_CONTENT_POLICY}
 Any input item rejected by this filter must receive status=discard.
 
@@ -311,7 +322,7 @@ confidence — число 0..1. reason — краткое объяснение �
 Верни каждый входной knowledge_id ровно один раз и в исходном порядке.
 Не возвращай Markdown, исправленные statements или дополнительные поля.
 Строгий JSON:
-{{"reviews":[{{"knowledge_id":"k_0001","status":"keep","confidence":0.94,"issues":[],"recommended_action":"none","reason":"..."}}]}}{correction}
+{{"reviews":[{{"knowledge_id":"k_0001","status":"keep","confidence":0.94,"issues":[],"recommended_action":"none","reason":"..."}}]}}{preference_prompt}{correction}
 
 KNOWLEDGE ITEMS:
 {json.dumps(payload, ensure_ascii=False, indent=2)}"""
@@ -410,8 +421,25 @@ def review_knowledge(
     client: StructuredLLM,
     *,
     embedder: StatementEmbedder | None = None,
+    preference_root: Path | None = None,
 ) -> KnowledgeReviewCollection:
     source, _, items = load_knowledge_items(knowledge_path)
+    history = (
+        load_review_preference_history(
+            preference_root,
+            exclude_directory=destination.parent,
+        )
+        if preference_root is not None
+        else None
+    )
+    if history is not None and history.is_usable:
+        LOGGER.info(
+            "Knowledge Review: персональная история — %d принято, %d отклонено "
+            "в %d проектах",
+            history.approved_count,
+            history.rejected_count,
+            history.project_count,
+        )
     active_embedder = embedder if embedder is not None else default_statement_embedder()
     groups = group_knowledge_items(items, embedder=active_embedder)
     items_by_id = {item.id: item for item in items}
@@ -429,7 +457,10 @@ def review_knowledge(
                 label += ", повторная попытка"
             try:
                 prompt = build_review_prompt(
-                    group, previous_response=previous, errors=validation_errors
+                    group,
+                    previous_response=previous,
+                    errors=validation_errors,
+                    preference_history=history,
                 )
                 with ActivityIndicator(label):
                     data, raw = generate_structured(client, prompt, schema=REVIEW_RESPONSE_SCHEMA)

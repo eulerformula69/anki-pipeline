@@ -258,6 +258,7 @@ def run_pipeline(
             paths.knowledge_review_json,
             paths.review_diagnostic_json,
             client,
+            preference_root=paths.directory.parent,
         )
         LOGGER.info("Knowledge Review: %s", paths.knowledge_review_json)
         return paths.knowledge_review_json

@@ -12,6 +12,7 @@ from src.review import (
     parse_review_response,
     review_knowledge,
 )
+from src.review_preferences import ReviewPreferenceExample, ReviewPreferenceHistory
 from src.content_quality import enforce_content_quality
 
 
@@ -20,6 +21,28 @@ def test_review_prompt_discards_non_learning_video_content() -> None:
 
     assert "use outside this specific video" in prompt
     assert "must receive status=discard" in prompt
+
+
+def test_review_prompt_includes_personal_preferences_when_available() -> None:
+    history = ReviewPreferenceHistory(
+        examples=[
+            ReviewPreferenceExample(True, "What does ばかり mean?", "Nothing but."),
+            ReviewPreferenceExample(True, "How is ようだ used?", "For likeness."),
+            ReviewPreferenceExample(True, "What does 別に mean?", "Not particularly."),
+            ReviewPreferenceExample(False, "What is the channel plan?", "Weekly videos."),
+            ReviewPreferenceExample(False, "Which game comes next?", "A voted game."),
+            ReviewPreferenceExample(False, "What does the author like?", "Games."),
+        ],
+        approved_count=3,
+        rejected_count=3,
+        project_count=1,
+    )
+
+    prompt = build_review_prompt([], preference_history=history)
+
+    assert "PERSONAL REVIEW PREFERENCES" in prompt
+    assert "What does ばかり mean?" in prompt
+    assert "Which game comes next?" in prompt
 
 
 def items() -> list[KnowledgeItem]:
