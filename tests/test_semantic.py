@@ -48,6 +48,45 @@ def test_duplicate_ids_are_rejected() -> None:
         parse_proposals(data, [0, 1, 2])
 
 
+def test_id_repeated_across_block_boundary_is_trimmed() -> None:
+    data = {
+        "segments": [
+            {
+                "title": "First topic",
+                "summary": "First summary",
+                "transcript_segment_ids": [0, 1],
+            },
+            {
+                "title": "Second topic",
+                "summary": "Second summary",
+                "transcript_segment_ids": [1, 2],
+            },
+        ]
+    }
+
+    proposals = parse_proposals(data, [0, 1, 2])
+
+    assert [proposal.transcript_segment_ids for proposal in proposals] == [
+        [0, 1],
+        [2],
+    ]
+
+
+def test_internal_duplicate_id_is_still_rejected() -> None:
+    data = {
+        "segments": [
+            {
+                "title": "Topic",
+                "summary": "Summary",
+                "transcript_segment_ids": [0, 1, 1, 2],
+            }
+        ]
+    }
+
+    with pytest.raises(SemanticSegmentationError, match="покрытие ID"):
+        parse_proposals(data, [0, 1, 2])
+
+
 def test_context_ids_at_outer_edges_are_trimmed() -> None:
     data = {
         "segments": [

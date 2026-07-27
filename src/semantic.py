@@ -189,6 +189,7 @@ def parse_proposals(data: dict[str, Any], expected_ids: list[int]) -> list[Propo
         proposals.append(ProposedBlock(title.strip(), summary.strip(), ids))
 
     proposals = trim_context_ids(proposals, expected_ids)
+    proposals = trim_repeated_boundary_ids(proposals)
 
     actual_ids = [item for proposal in proposals for item in proposal.transcript_segment_ids]
     if actual_ids != expected_ids:
@@ -196,6 +197,25 @@ def parse_proposals(data: dict[str, Any], expected_ids: list[int]) -> list[Propo
             f"Нарушено покрытие ID: ожидалось {expected_ids}, получено {actual_ids}."
         )
     return proposals
+
+
+def trim_repeated_boundary_ids(
+    proposals: list[ProposedBlock],
+) -> list[ProposedBlock]:
+    """Remove an ID repeated only across the boundary of adjacent blocks."""
+    normalized: list[ProposedBlock] = []
+    for proposal in proposals:
+        ids = proposal.transcript_segment_ids
+        if (
+            normalized
+            and normalized[-1].transcript_segment_ids[-1] == ids[0]
+        ):
+            ids = ids[1:]
+        if ids:
+            normalized.append(
+                ProposedBlock(proposal.title, proposal.summary, ids)
+            )
+    return normalized
 
 
 def trim_context_ids(
