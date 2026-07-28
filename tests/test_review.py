@@ -104,6 +104,40 @@ def test_duplicate_or_missing_review_id_is_invalid() -> None:
         parse_review_response(data, ["k1", "k2"])
 
 
+def test_extra_ids_from_another_group_are_ignored_and_expected_are_reordered() -> None:
+    data = {
+        "reviews": [
+            review_item("k_old"),
+            review_item("k2"),
+            review_item("k1"),
+        ]
+    }
+
+    result = parse_review_response(data, ["k1", "k2"])
+
+    assert [item.knowledge_id for item in result] == ["k1", "k2"]
+
+
+def test_duplicate_split_with_merge_action_is_normalized_to_merge() -> None:
+    data = {
+        "reviews": [
+            review_item(
+                "k1",
+                "split",
+                issues=["duplicate", "redundant"],
+                recommended_action="merge",
+                reason="Duplicates k2.",
+            ),
+            review_item("k2"),
+        ]
+    }
+
+    result = parse_review_response(data, ["k1", "k2"])
+
+    assert result[0].status == "merge"
+    assert result[0].recommended_action == "merge"
+
+
 def test_five_point_confidence_is_normalized() -> None:
     data = {"reviews": [review_item("k1", confidence=5)]}
 

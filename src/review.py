@@ -339,15 +339,22 @@ def parse_review_response(
         raise KnowledgeReviewError("Поле reviews должно быть массивом.")
     if "<think>" in raw_response.casefold():
         errors.append("Ответ содержит <think>.")
+    expected_set = set(expected_ids)
     reviews: list[KnowledgeReview] = []
     for index, raw in enumerate(raw_reviews):
         prefix = f"Review {index + 1}: "
         if not isinstance(raw, dict):
             errors.append(prefix + "значение должно быть объектом.")
             continue
+        knowledge_id = raw.get("knowledge_id")
+        if isinstance(knowledge_id, str) and knowledge_id not in expected_set:
+            LOGGER.warning(
+                "Knowledge Review: проигнорирован ID %s из соседней группы.",
+                knowledge_id,
+            )
+            continue
         if set(raw) != REVIEW_FIELDS:
             errors.append(prefix + "набор полей не соответствует схеме.")
-        knowledge_id = raw.get("knowledge_id")
         status = raw.get("status")
         confidence = normalize_review_confidence(raw.get("confidence"))
         issues = raw.get("issues")
@@ -374,6 +381,14 @@ def parse_review_response(
         if not isinstance(reason, str) or not reason.strip():
             errors.append(prefix + "reason должен быть непустой строкой.")
         if not any(error.startswith(prefix) for error in errors):
+            if (
+                status == "split"
+                and action == "merge"
+                and isinstance(issues, list)
+                and bool(set(issues) & {"duplicate", "redundant"})
+                and "contains_two_facts" not in issues
+            ):
+                status = "merge"
             reviews.append(
                 KnowledgeReview(
                     knowledge_id=knowledge_id,
@@ -384,14 +399,16 @@ def parse_review_response(
                     reason=reason.strip(),
                 )
             )
+    reviews_by_id = {review.knowledge_id: review for review in reviews}
     actual_ids = [review.knowledge_id for review in reviews]
-    if actual_ids != expected_ids:
+    if len(reviews_by_id) != len(reviews) or set(actual_ids) != expected_set:
         errors.append(
             f"Нарушено покрытие knowledge ID: ожидалось {expected_ids}, получено {actual_ids}."
         )
     if errors:
         raise KnowledgeReviewError(" | ".join(errors))
-    return normalize_review_relations(reviews)
+    ordered = [reviews_by_id[knowledge_id] for knowledge_id in expected_ids]
+    return normalize_review_relations(ordered)
 
 
 def save_review_diagnostic(
