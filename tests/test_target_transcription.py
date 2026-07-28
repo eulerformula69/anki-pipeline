@@ -7,6 +7,7 @@ from src.target_transcription import (
     TargetTranscriptionError,
     build_target_ranges,
     load_candidate_source_ids,
+    native_expression_matches_primary,
 )
 
 
@@ -62,3 +63,29 @@ def test_early_unverified_expression_is_sent_to_second_pass(tmp_path) -> None:
     }]}), encoding="utf-8")
     primary = {1: "The example is ashita wa hare datte"}
     assert load_candidate_source_ids(path, primary) == {1}
+
+
+def test_native_japanese_expression_is_sent_to_second_pass(tmp_path) -> None:
+    path = tmp_path / "expressions.json"
+    path.write_text(json.dumps({"expressions": [{
+        "surface": "～ようにする",
+        "romanization": "yō ni suru",
+        "source_transcript_segment_ids": [1, 2],
+    }]}), encoding="utf-8")
+    primary = {
+        1: "Today we study ようにする.",
+        2: "This segment only contains an English explanation.",
+    }
+
+    assert load_candidate_source_ids(path, primary) == {1}
+
+
+def test_native_match_ignores_spacing_and_pattern_marker() -> None:
+    assert native_expression_matches_primary(
+        "～ようにする",
+        "The form is よう に する。",
+    )
+
+
+def test_single_native_character_is_too_broad_for_range_selection() -> None:
+    assert not native_expression_matches_primary("日", "毎日歩く")

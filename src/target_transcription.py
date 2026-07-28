@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,14 @@ class TargetAudioRange:
     source_transcript_segment_ids: list[int]
 
 
+def native_expression_matches_primary(surface: str, primary: str) -> bool:
+    native = re.sub(r"[\s、。,.!?！？'\"「」『』（）()~〜～]+", "", surface)
+    haystack = re.sub(r"[\s、。,.!?！？'\"「」『』（）()~〜～]+", "", primary)
+    if len(native) < 2 or not re.search(r"[\u3040-\u30ff\u3400-\u9fff]", native):
+        return False
+    return native in haystack
+
+
 def load_candidate_source_ids(
     expressions_path: Path, primary_text: dict[int, str] | None = None,
 ) -> set[int]:
@@ -35,10 +44,14 @@ def load_candidate_source_ids(
         result: set[int] = set()
         for expression in expressions:
             romanization = str(expression.get("romanization", ""))
+            surface = str(expression.get("surface", ""))
             for segment_id in expression["source_transcript_segment_ids"]:
                 source_id = int(segment_id)
-                if primary_text is None or romanization_matches_primary(
-                    romanization, primary_text.get(source_id, "")
+                source = primary_text.get(source_id, "") if primary_text else ""
+                if (
+                    primary_text is None
+                    or native_expression_matches_primary(surface, source)
+                    or romanization_matches_primary(romanization, source)
                 ):
                     result.add(source_id)
         return result
