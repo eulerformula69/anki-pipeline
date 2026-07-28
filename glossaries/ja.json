@@ -95,6 +95,114 @@
       "reading": "よう",
       "meaning": "форма; подобие",
       "type": "term"
+    },
+    {
+      "romanization": "koto",
+      "surface": "こと",
+      "reading": "こと",
+      "meaning": "абстрактная вещь; обстоятельство",
+      "aliases": ["kotron"],
+      "type": "term"
+    },
+    {
+      "romanization": "ni",
+      "surface": "に",
+      "reading": "に",
+      "meaning": "логическая частица направления или результата",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "koto ni",
+      "surface": "ことに",
+      "reading": "ことに",
+      "meaning": "превращая ситуацию в определённое обстоятельство",
+      "aliases": ["kotroni"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "koto ni suru",
+      "surface": "ことにする",
+      "reading": "ことにする",
+      "meaning": "решить сделать; установить, что будет сделано",
+      "aliases": ["kotroni suru"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "koto ni naru",
+      "surface": "ことになる",
+      "reading": "ことになる",
+      "meaning": "получиться так, что; быть решённым",
+      "aliases": ["kotroni naru"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "koto ni shita",
+      "surface": "ことにした",
+      "reading": "ことにした",
+      "meaning": "решил сделать",
+      "aliases": ["kotroni shita", "kotroni shitta"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "koto ni natta",
+      "surface": "ことになった",
+      "reading": "ことになった",
+      "meaning": "получилось так, что; было решено",
+      "aliases": ["kotroni natta"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "ni suru",
+      "surface": "にする",
+      "reading": "にする",
+      "meaning": "сделать чем-либо; привести в состояние",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "ni naru",
+      "surface": "になる",
+      "reading": "になる",
+      "meaning": "стать чем-либо; перейти в состояние",
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "you ni suru",
+      "surface": "ようにする",
+      "reading": "ようにする",
+      "meaning": "стараться сделать; сделать так, чтобы",
+      "aliases": ["yō ni suru"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "you ni naru",
+      "surface": "ようになる",
+      "reading": "ようになる",
+      "meaning": "дойти до состояния; стать способным",
+      "aliases": ["yō ni naru"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "sakura wa kaeru ni natta",
+      "surface": "サクラはカエルになった",
+      "reading": "さくらはかえるになった",
+      "meaning": "Сакура превратилась в лягушку",
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "majo ga sakura o kaeru ni shita",
+      "surface": "魔女がサクラをカエルにした",
+      "reading": "まじょがさくらをかえるにした",
+      "meaning": "Ведьма превратила Сакуру в лягушку",
+      "aliases": ["macho ga sakura wo kaeru ni shitta"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "furansu de ryuugaku suru",
+      "surface": "フランスで留学する",
+      "reading": "ふらんすでりゅうがくする",
+      "meaning": "учиться во Франции",
+      "aliases": ["france de ryuugaku suru"],
+      "type": "example_sentence"
     }
   ]
 }

@@ -95,7 +95,13 @@ def localize_card_text(
     replacements = [
         (expression, spelling)
         for expression in replacement_expressions
-        if expression.type != "example_sentence"
+        if (
+            expression.type != "example_sentence"
+            or (
+                expression.verification == "verified"
+                and len(re.findall(r"[a-z]+", expression.romanization.casefold())) >= 3
+            )
+        )
         for spelling in [
             expression.romanization,
             *(expression.romanization_aliases or []),
@@ -112,7 +118,7 @@ def localize_card_text(
         if romanization.casefold().endswith("ii"):
             escaped = re.escape(romanization[:-1]) + "i?"
         pattern = re.compile(
-            rf"(?<![A-Za-z])[-~〜～]?\s*{escaped}(?![A-Za-z])",
+            rf"(?<![A-Za-z])(?:[-~〜～]\s*)?{escaped}(?![A-Za-z])",
             re.IGNORECASE,
         )
         front = pattern.sub(expression.surface, front)

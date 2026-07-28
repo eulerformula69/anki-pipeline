@@ -98,6 +98,18 @@ def test_second_pass_native_evidence_marks_expression_transcribed() -> None:
     assert result[0].verification == "transcribed"
 
 
+def test_native_primary_and_second_pass_agreement_is_transcribed() -> None:
+    result = parse_response(
+        valid_response(),
+        [item()],
+        "ja",
+        native_evidence={3: ["この場合は、だって。"]},
+        primary_evidence={3: "The written form is だって."},
+    )
+
+    assert result[0].verification == "transcribed"
+
+
 def test_second_pass_without_primary_phonetic_match_is_not_trusted() -> None:
     result = parse_response(
         valid_response(), [item()], "ja", native_evidence={3: ["だって。"]},
@@ -234,6 +246,41 @@ def test_glossary_recovers_known_expression_without_llm_output() -> None:
     assert result[0].verification == "verified"
     assert result[0].source_transcript_segment_ids == [7]
     assert result[0].romanization_aliases == ["yohda"]
+
+
+def test_glossary_recovers_recurring_whisper_misrecognition() -> None:
+    segments = [
+        TranscriptSegment(
+            id=7,
+            start=1.0,
+            end=2.0,
+            text="Today we compare kotroni suru and kotroni naru.",
+        )
+    ]
+    glossary = {
+        "koto ni suru": {
+            "surface": "ことにする",
+            "reading": "ことにする",
+            "type": "grammar_pattern",
+            "aliases": ["kotroni suru"],
+        },
+        "koto ni naru": {
+            "surface": "ことになる",
+            "reading": "ことになる",
+            "type": "grammar_pattern",
+            "aliases": ["kotroni naru"],
+        },
+    }
+
+    result = glossary_expressions_from_transcript(
+        segments,
+        glossary,
+        [],
+        language="ja",
+    )
+
+    assert [item.surface for item in result] == ["ことにする", "ことになる"]
+    assert all(item.verification == "verified" for item in result)
 
 
 def test_glossary_does_not_match_inside_an_english_word() -> None:

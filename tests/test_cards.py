@@ -264,6 +264,33 @@ def test_native_sentence_is_not_prefixed_when_romaji_is_misrecognized() -> None:
     assert result.expression_ids == []
 
 
+def test_verified_glossary_sentence_is_replaced_when_exactly_present() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(
+        ["k_0001"],
+        "basic",
+        "What does Sakura wa kaeru ni natta mean?",
+        "Sakura wa kaeru ni natta means Sakura became a frog.",
+        "",
+        2,
+    )
+    expression = TargetExpression(
+        "e_example", "ja", "サクラはカエルになった", "さくらはかえるになった",
+        "sakura wa kaeru ni natta", "Sakura became a frog.",
+        [], [1], "verified", 1.0, "example_sentence",
+    )
+
+    result = proposal_to_candidate(
+        proposal,
+        {items[0].id: items[0]},
+        {},
+        [expression],
+    )
+
+    assert result.front == "What does サクラはカエルになった mean?"
+    assert result.back == "サクラはカエルになった means Sakura became a frog."
+
+
 def test_verified_term_is_replaced_globally() -> None:
     items = knowledge_items()[:1]
     proposal = CardProposal(
@@ -299,6 +326,38 @@ def test_verified_romanization_alias_is_replaced_globally() -> None:
 
     assert result.front == "What does か mark?"
     assert result.back == "か marks a question."
+
+
+def test_recurring_whisper_alias_is_replaced_with_japanese_grammar() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(
+        ["k_0001"],
+        "basic",
+        "How do kotroni suru and kotroni naru differ?",
+        "Kotroni suru is deliberate; kotroni naru describes what came about.",
+        "",
+        2,
+    )
+    expressions = [
+        TargetExpression(
+            "e_suru", "ja", "ことにする", "ことにする", "koto ni suru", "decide",
+            [], [1], "verified", 1.0, "grammar_pattern", ["kotroni suru"],
+        ),
+        TargetExpression(
+            "e_naru", "ja", "ことになる", "ことになる", "koto ni naru", "come about",
+            [], [1], "verified", 1.0, "grammar_pattern", ["kotroni naru"],
+        ),
+    ]
+
+    result = proposal_to_candidate(
+        proposal,
+        {items[0].id: items[0]},
+        {},
+        expressions,
+    )
+
+    assert result.front == "How do ことにする and ことになる differ?"
+    assert result.back == "ことにする is deliberate; ことになる describes what came about."
 
 
 def test_suffix_spelling_variant_is_replaced_without_example_prefix() -> None:

@@ -179,12 +179,18 @@ def parse_response(
             text for source_id in source_ids
             for text in (native_evidence or {}).get(source_id, [])
         )
+        primary_text = " ".join(
+            (primary_evidence or {}).get(source_id, "") for source_id in source_ids
+        )
+        normalized_surface = _normalize_native(raw["surface"])
         transcribed = (
             bool(evidence_text)
-            and _normalize_native(raw["surface"]) in _normalize_native(evidence_text)
-            and romanization_matches_primary(
-                raw["romanization"], " ".join(
-                    (primary_evidence or {}).get(source_id, "") for source_id in source_ids
+            and normalized_surface in _normalize_native(evidence_text)
+            and (
+                normalized_surface in _normalize_native(primary_text)
+                or romanization_matches_primary(
+                    raw["romanization"],
+                    primary_text,
                 )
             )
         )
