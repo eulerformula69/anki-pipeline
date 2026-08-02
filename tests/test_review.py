@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pytest
 
+from src.llm import LLMError
 from src.models import KnowledgeItem, KnowledgeReview
 from src.review import (
     KnowledgeReviewError,
@@ -379,3 +380,31 @@ def test_invalid_review_uses_keep_fallback_and_preserves_diagnostic(tmp_path) ->
     assert [item.status for item in result.reviews] == ["keep", "keep"]
     assert all(item.confidence == 0 for item in result.reviews)
     assert len(json.loads(diagnostic.read_text(encoding="utf-8"))["ollama_responses"]) == 2
+
+
+def test_provider_failures_retry_then_use_keep_fallback(tmp_path) -> None:
+    class FailingClient:
+        model = "qwen3:8b"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate_json(self, prompt: str):
+            self.calls += 1
+            raise LLMError("provider timed out")
+
+    client = FailingClient()
+    diagnostic = tmp_path / "diagnostic.json"
+
+    result = review_knowledge(
+        write_knowledge(tmp_path), tmp_path / "review.json", diagnostic, client
+    )
+
+    assert client.calls == 2
+    assert [item.status for item in result.reviews] == ["keep", "keep"]
+    saved_diagnostic = json.loads(diagnostic.read_text(encoding="utf-8"))
+    assert saved_diagnostic["errors"] == "provider timed out"
+    assert saved_diagnostic["ollama_responses"] == [
+        "provider timed out",
+        "provider timed out",
+    ]

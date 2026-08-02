@@ -498,8 +498,15 @@ def review_knowledge(
             except KnowledgeReviewError as exc:
                 previous = responses[-1] if responses else ""
                 validation_errors = str(exc).split(" | ")
-            except LLMError:
-                raise
+            except LLMError as exc:
+                # Review is an advisory stage: a transient provider failure must
+                # not discard the work completed by the rest of the pipeline.
+                # Record the failure, retry once, then use the same conservative
+                # keep fallback as for structurally invalid model responses.
+                error_message = str(exc)
+                responses.append(error_message)
+                previous = ""
+                validation_errors = [error_message]
             if attempt == 1:
                 message = " | ".join(validation_errors or ["Неизвестная ошибка."])
                 save_review_diagnostic(
@@ -511,7 +518,7 @@ def review_knowledge(
                 )
                 LOGGER.warning(
                     "Knowledge Review группы %d заменён безопасным keep после двух "
-                    "некорректных ответов. Диагностика: %s",
+                    "неудачных попыток. Диагностика: %s",
                     group_number,
                     diagnostic_path,
                 )
@@ -522,7 +529,7 @@ def review_knowledge(
                         confidence=0.0,
                         issues=["unclear"],
                         recommended_action="none",
-                        reason="Автоматический fallback: ответ модели не прошёл проверку.",
+                        reason="Автоматический fallback: Knowledge Review не смог надёжно обработать группу.",
                     )
                     for item_id in expected_ids
                 )
