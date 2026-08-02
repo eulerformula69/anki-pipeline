@@ -203,6 +203,126 @@
       "meaning": "учиться во Франции",
       "aliases": ["france de ryuugaku suru"],
       "type": "example_sentence"
+    },
+    {
+      "romanization": "ba reba",
+      "surface": "〜ば・〜れば",
+      "reading": "〜ば・〜れば",
+      "meaning": "условная форма ば／れば",
+      "aliases": ["bar-deba", "ba-reba", "ba/reba", "bar ba deba"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "godan verbs",
+      "surface": "五段動詞",
+      "reading": "ごだんどうし",
+      "meaning": "глаголы годан",
+      "aliases": ["go-down verbs"],
+      "type": "term"
+    },
+    {
+      "romanization": "ichidan verbs",
+      "surface": "一段動詞",
+      "reading": "いちだんどうし",
+      "meaning": "глаголы итидан",
+      "aliases": ["each-down verbs"],
+      "type": "term"
+    },
+    {
+      "romanization": "omoshirokunai",
+      "surface": "おもしろくない",
+      "reading": "おもしろくない",
+      "meaning": "неинтересный",
+      "aliases": ["omoshiro kun-nai"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "omoshirokatta",
+      "surface": "おもしろかった",
+      "reading": "おもしろかった",
+      "meaning": "было интересно",
+      "aliases": ["omoshiro ka-ka", "omoshirokakka"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "omoshirokereba",
+      "surface": "おもしろければ",
+      "reading": "おもしろければ",
+      "meaning": "если интересно",
+      "aliases": ["omoshiro kereba"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "dou sureba ii",
+      "surface": "どうすればいい",
+      "reading": "どうすればいい",
+      "meaning": "что мне делать",
+      "aliases": ["do-sure-ba-i", "dosereba i"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "kasa o motte kureba yokatta",
+      "surface": "傘を持ってくればよかった",
+      "reading": "かさをもってくればよかった",
+      "meaning": "надо было взять с собой зонт",
+      "aliases": ["kasa omotte kureba-yokatta"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "benkyou shinakereba ikemasen",
+      "surface": "勉強しなければいけません",
+      "reading": "べんきょうしなければいけません",
+      "meaning": "нужно учиться",
+      "aliases": ["benkyo shina kereba ikemasen"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "nakereba dame",
+      "surface": "なければだめ",
+      "reading": "なければだめ",
+      "meaning": "если не сделать, будет плохо; необходимо сделать",
+      "aliases": ["na kereba dami"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "shinakya",
+      "surface": "しなきゃ",
+      "reading": "しなきゃ",
+      "meaning": "надо сделать; сокращение от しなければ",
+      "aliases": ["shinaka", "shina kya"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "shinakereba",
+      "surface": "しなければ",
+      "reading": "しなければ",
+      "meaning": "если не сделать; сокращённая основа выражения необходимости",
+      "aliases": ["shina kereba"],
+      "type": "grammar_pattern"
+    },
+    {
+      "romanization": "naze ikanakereba ikenai",
+      "surface": "なぜ行かなければいけない",
+      "reading": "なぜいかなければいけない",
+      "meaning": "почему я должен идти",
+      "aliases": ["naze ikana kereba ikanae", "naze ikana kereba ikenai"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "ikanakereba ikenai",
+      "surface": "行かなければいけない",
+      "reading": "いかなければいけない",
+      "meaning": "нужно идти",
+      "aliases": ["ikana kereba ikanae", "ikana kereba ikenai"],
+      "type": "example_sentence"
+    },
+    {
+      "romanization": "ikanakya",
+      "surface": "行かなきゃ",
+      "reading": "いかなきゃ",
+      "meaning": "мне надо идти",
+      "aliases": ["ikana kya"],
+      "type": "example_sentence"
     }
   ]
 }

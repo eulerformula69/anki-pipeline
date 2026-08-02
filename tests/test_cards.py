@@ -360,6 +360,41 @@ def test_recurring_whisper_alias_is_replaced_with_japanese_grammar() -> None:
     assert result.back == "ことにする is deliberate; ことになる describes what came about."
 
 
+def test_english_whisper_term_is_replaced_with_verified_japanese() -> None:
+    items = knowledge_items()[:1]
+    proposal = CardProposal(
+        ["k_0001"],
+        "basic",
+        "How do go-down verbs form bar-deba?",
+        "Omoshiro ka-ka is the past form.",
+        "Bar-deba also appears in the explanation.",
+        2,
+    )
+    expressions = [
+        TargetExpression(
+            "e_godan", "ja", "五段動詞", "ごだんどうし", "godan verbs", "",
+            [], [1], "verified", 1.0, "term", ["go-down verbs"],
+        ),
+        TargetExpression(
+            "e_ba", "ja", "〜ば・〜れば", "〜ば・〜れば", "ba reba", "",
+            [], [1], "verified", 1.0, "grammar_pattern", ["bar-deba"],
+        ),
+        TargetExpression(
+            "e_past", "ja", "おもしろかった", "おもしろかった",
+            "omoshirokatta", "", [], [1], "verified", 1.0,
+            "example_sentence", ["omoshiro ka-ka"],
+        ),
+    ]
+
+    result = proposal_to_candidate(
+        proposal, {items[0].id: items[0]}, {}, expressions
+    )
+
+    assert result.front == "How do 五段動詞 form 〜ば・〜れば?"
+    assert result.back == "おもしろかった is the past form."
+    assert result.extra == "〜ば・〜れば also appears in the explanation."
+
+
 def test_suffix_spelling_variant_is_replaced_without_example_prefix() -> None:
     items = knowledge_items()[:1]
     proposal = CardProposal(

@@ -97,10 +97,7 @@ def localize_card_text(
         for expression in replacement_expressions
         if (
             expression.type != "example_sentence"
-            or (
-                expression.verification == "verified"
-                and len(re.findall(r"[a-z]+", expression.romanization.casefold())) >= 3
-            )
+            or expression.verification == "verified"
         )
         for spelling in [
             expression.romanization,
@@ -123,6 +120,7 @@ def localize_card_text(
         )
         front = pattern.sub(expression.surface, front)
         back = pattern.sub(expression.surface, back)
+        extra = pattern.sub(expression.surface, extra)
     if expressions:
         labels = [
             f"{item.surface} [{item.reading}] ({item.romanization})"

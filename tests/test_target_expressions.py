@@ -303,6 +303,49 @@ def test_glossary_recovers_recurring_whisper_misrecognition() -> None:
     assert all(item.verification == "verified" for item in result)
 
 
+def test_glossary_recovers_japanese_terms_from_english_whisper_errors() -> None:
+    segments = [
+        TranscriptSegment(
+            id=7,
+            start=1.0,
+            end=2.0,
+            text=(
+                "For go-down verbs use bar-deba; omoshiroi becomes "
+                "omoshiro ka-ka."
+            ),
+        )
+    ]
+    glossary = {
+        "ba reba": {
+            "surface": "〜ば・〜れば",
+            "reading": "〜ば・〜れば",
+            "type": "grammar_pattern",
+            "aliases": ["bar-deba"],
+        },
+        "godan verbs": {
+            "surface": "五段動詞",
+            "reading": "ごだんどうし",
+            "type": "term",
+            "aliases": ["go-down verbs"],
+        },
+        "omoshirokatta": {
+            "surface": "おもしろかった",
+            "reading": "おもしろかった",
+            "type": "example_sentence",
+            "aliases": ["omoshiro ka-ka"],
+        },
+    }
+
+    result = glossary_expressions_from_transcript(
+        segments, glossary, [], language="ja"
+    )
+
+    assert [item.surface for item in result] == [
+        "〜ば・〜れば", "五段動詞", "おもしろかった"
+    ]
+    assert all(item.verification == "verified" for item in result)
+
+
 def test_glossary_does_not_match_inside_an_english_word() -> None:
     segments = [
         TranscriptSegment(
