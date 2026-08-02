@@ -89,13 +89,33 @@ def test_glossary_replaces_romaji_and_verifies_expression(tmp_path) -> None:
     assert result[0].verification == "verified"
 
 
-def test_second_pass_native_evidence_marks_expression_transcribed() -> None:
+def test_second_pass_repeating_primary_romaji_error_still_needs_review() -> None:
     result = parse_response(
         valid_response(), [item()], "ja", native_evidence={3: ["だって。"]},
         primary_evidence={3: "The particle datte is used here."},
     )
 
-    assert result[0].verification == "transcribed"
+    assert result[0].verification == "needs_review"
+
+
+def test_forced_japanese_translation_of_english_still_needs_review() -> None:
+    translated = valid_response()
+    translated["expressions"][0].update({
+        "surface": "今日はコンディショナルについて話します",
+        "reading": "きょうはコンディショナルについてはなします",
+        "romanization": "kyou wa kondishonaru ni tsuite hanashimasu",
+        "source_transcript_segment_ids": [3],
+    })
+
+    result = parse_response(
+        translated,
+        [item()],
+        "ja",
+        native_evidence={3: ["今日はコンディショナルについて話します。"]},
+        primary_evidence={3: "Today we will talk about the conditional."},
+    )
+
+    assert result[0].verification == "needs_review"
 
 
 def test_native_primary_and_second_pass_agreement_is_transcribed() -> None:

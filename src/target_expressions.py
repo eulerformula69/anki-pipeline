@@ -51,8 +51,10 @@ Return isolated words, grammar constructions, and complete example sentences.
 type must be term, grammar_pattern, or example_sentence.
 The transcript may contain inaccurate romanization. Reconstruct native writing cautiously.
 target_language_transcript is a noisy second Whisper pass over the same audio interval.
-Use its native spelling only when it phonetically agrees with romanized target-language
-speech in the primary text. Never extract an expression from the second pass alone.
+It may translate English speech or repeat a phonetic recognition error. Use it only as
+a spelling suggestion when it agrees with target-language speech in the primary text.
+Never extract an expression from the second pass alone and never preserve a visibly
+nonstandard form merely because both transcripts contain the same phonetic error.
 The explanations may be in another language. Use that language in meaning.
 surface must use the target language's native writing system (for Japanese: kana/kanji).
 reading is the native pronunciation aid (for Japanese: kana). romanization is Latin script.
@@ -183,16 +185,15 @@ def parse_response(
             (primary_evidence or {}).get(source_id, "") for source_id in source_ids
         )
         normalized_surface = _normalize_native(raw["surface"])
+        # A language-forced Whisper pass can translate surrounding English or repeat
+        # the primary ASR's phonetic mistake. That makes romaji agreement useful for
+        # selecting an audio range, but unsafe as proof for automatic export. Only
+        # native text present in both independent transcripts is strong evidence;
+        # romaji-only material remains available for manual review or a glossary fix.
         transcribed = (
             bool(evidence_text)
             and normalized_surface in _normalize_native(evidence_text)
-            and (
-                normalized_surface in _normalize_native(primary_text)
-                or romanization_matches_primary(
-                    raw["romanization"],
-                    primary_text,
-                )
-            )
+            and normalized_surface in _normalize_native(primary_text)
         )
         result.append(TargetExpression(
             id=f"e_{len(result) + 1:04d}", language=language,
