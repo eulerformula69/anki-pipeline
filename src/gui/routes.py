@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from ..paths import build_result_paths
+from ..notebooklm import NOTEBOOKLM_PROMPT, NotebookLMImportError, import_notebooklm_cards
 from ..source_ingest import SourceIngestError, prepare_source
 from .review_store import ReviewError, normalize_uploaded_image
 from .schemas import PipelineRunRequest, STAGES, STAGE_LABELS
@@ -206,6 +207,55 @@ async def create_job(
 def job_page(request: Request, job_id: str):
     state = _job(request, job_id)
     return _render(request, "job.html", {"job": state, "labels": STAGE_LABELS})
+
+
+@router.get("/jobs/{job_id}/transcript")
+def download_transcript(request: Request, job_id: str):
+    state = _job(request, job_id)
+    path = _safe_output(state, request.app.state.root) / "transcript.txt"
+    if not path.is_file():
+        raise HTTPException(404, "Транскрипция ещё не готова.")
+    return FileResponse(path, filename=f"{Path(state.video_path).stem}-transcript.txt")
+
+
+@router.get("/jobs/{job_id}/notebooklm-prompt")
+def download_notebooklm_prompt(request: Request, job_id: str):
+    _job(request, job_id)
+    return PlainTextResponse(
+        NOTEBOOKLM_PROMPT,
+        headers={"Content-Disposition": 'attachment; filename="notebooklm-anki-prompt.txt"'},
+    )
+
+
+@router.post("/jobs/{job_id}/notebooklm-cards")
+async def import_cards_from_notebooklm(
+    request: Request,
+    job_id: str,
+    csrf: Annotated[str, Form()],
+    cards_file: Annotated[UploadFile, File()],
+    frames_per_card: Annotated[int, Form()] = 5,
+    image_policy: Annotated[str, Form()] = "auto",
+):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    if not cards_file.filename or Path(cards_file.filename).suffix.lower() != ".txt":
+        return _render(request, "error.html", {"message": "Загрузите .txt файл из NotebookLM."}, 422)
+    data = await cards_file.read(2 * 1024 * 1024 + 1)
+    await cards_file.close()
+    if len(data) > 2 * 1024 * 1024:
+        return _render(request, "error.html", {"message": "Файл карточек больше 2 МБ."}, 422)
+    try:
+        import_notebooklm_cards(data.decode("utf-8"), output / "transcript.json", output / "card_candidates.json")
+        if not 1 <= frames_per_card <= 20 or image_policy not in {"auto", "always", "never"}:
+            raise ValueError("Некорректные параметры подбора кадров.")
+        job = request.app.state.jobs.submit(PipelineRunRequest(
+            video_path=Path(state.video_path), source=state.source, stages=["frame_extraction"],
+            frames_per_card=frames_per_card, image_policy=image_policy, force=True,
+        ))
+    except (UnicodeDecodeError, NotebookLMImportError, ValueError) as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{job.job_id}", 303)
 
 
 @router.get("/jobs/{job_id}/events")

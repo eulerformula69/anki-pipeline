@@ -6,6 +6,18 @@
   <ol id="stages">{% for stage in job.stages %}<li data-stage="{{ stage }}">{{ labels.get(stage, stage) }}</li>{% endfor %}</ol>
   <p id="error" class="error">{{ job.error or '' }}</p>
   <a id="review-link" class="primary {% if job.status != 'awaiting_review' %}hidden{% endif %}" href="/jobs/{{ job.job_id }}/review">Перейти к ручной проверке</a>
+  <section class="notebooklm-flow">
+    <h2>NotebookLM</h2>
+    <p>Скачайте транскрипцию с таймкодами, загрузите её в NotebookLM, а затем верните сюда созданный им .txt.</p>
+    <a class="primary" href="/jobs/{{ job.job_id }}/transcript">Скачать транскрипцию</a>
+    <a class="primary" href="/jobs/{{ job.job_id }}/notebooklm-prompt">Скачать промпт для NotebookLM</a>
+    <form method="post" action="/jobs/{{ job.job_id }}/notebooklm-cards" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Карточки из NotebookLM (.txt)<input name="cards_file" type="file" accept=".txt,text/plain" required></label>
+      <div class="fields"><label>Кадров на карточку<input type="number" min="1" max="20" name="frames_per_card" value="5"></label><label>Правило отбора<select name="image_policy"><option>auto</option><option>always</option><option>never</option></select></label></div>
+      <button type="submit">Найти кадры для карточек</button>
+    </form>
+  </section>
 </section>
 <script>
 const stream = new EventSource('/jobs/{{ job.job_id }}/events');

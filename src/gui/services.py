@@ -27,7 +27,9 @@ DEPENDENCIES = {
     "knowledge_extraction": ("semantic_segmentation",),
     "knowledge_review": ("knowledge_extraction",),
     "card_generation": ("knowledge_extraction", "knowledge_review"),
-    "frame_extraction": ("transcription", "card_generation"),
+    # Card text now comes from the NotebookLM import. Keeping the old local
+    # generation chain here would silently bring Qwen back into the main flow.
+    "frame_extraction": ("transcription",),
 }
 
 
