@@ -1,48 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Новый проект · anki-pipeline{% endblock %}
+{% block title %}Новая колода · anki-pipeline{% endblock %}
 {% block content %}
-<section class="panel hero">
-  <p class="eyebrow">НОВЫЙ ПРОЕКТ</p>
-  <h1>Превратите видео в проверенные карточки</h1>
-  <p>Конвейер подготовит материалы. Колода создаётся только после вашей ручной проверки.</p>
+<section class="hero">
+  <p class="eyebrow">ANKI ИЗ ВИДЕО</p>
+  <h1>Ваша колода начинается с хороших карточек.</h1>
+  <p class="hero-copy">Конвейер подготовит транскрипцию и кадры. Содержание карточек создаёт NotebookLM — вы сохраняете полный контроль над тем, что попадёт в Anki.</p>
 </section>
-<form class="panel" method="post" action="/jobs" enctype="multipart/form-data">
+
+<form class="panel start-card" method="post" action="/jobs" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <h2>1. Источник</h2>
+  <input type="hidden" name="stages" value="transcription">
+  <p class="step-number">Шаг 1 из 3</p>
+  <h2>Добавьте видео</h2>
+  <p class="hint">Подойдёт ссылка на один ролик YouTube или файл записи лекции.</p>
   <div class="source-grid">
-    <label>YouTube URL<input type="url" name="youtube_url" placeholder="https://www.youtube.com/watch?v=..."></label>
+    <label>Ссылка YouTube<input type="url" name="youtube_url" placeholder="https://www.youtube.com/watch?v=..."></label>
     <div class="or">или</div>
-    <label>Выбрать видеофайл<input type="file" name="video_file" accept="video/*,.mkv"></label>
+    <label>Видеофайл<input type="file" name="video_file" accept="video/*,.mkv"></label>
   </div>
-  <h2>2. Стадии</h2>
-  <p class="hint">Зависимости будут добавлены в вычисленный план автоматически.</p>
-  <div class="stage-grid">
-  {% for key, label in stages.items() %}
-    <label class="check"><input type="checkbox" name="stages" value="{{ key }}" {% if key == 'transcription' %}checked{% endif %}> <span>{{ label }}</span></label>
-  {% endfor %}
-  </div>
-  <details><summary>Дополнительные параметры</summary>
+  <button class="primary" type="submit">Создать транскрипцию</button>
+  <p class="safety">На этом шаге карточки не создаются и в Anki ничего не экспортируется.</p>
+  <details class="advanced"><summary>Настроить распознавание речи</summary>
     <div class="fields">
-      <label>Основной язык<input name="language" placeholder="auto"></label>
-      <label>Изучаемый язык<input name="target_language" value="ja"></label>
-      <label>Whisper model<input name="model" value="small"></label>
-      <label>Device<select name="device"><option>auto</option><option>cuda</option><option>cpu</option></select></label>
-      <fieldset><legend>LLM provider</legend><label><input type="radio" name="llm_provider" value="ollama" checked> Ollama</label><label><input type="radio" name="llm_provider" value="gemini"> Gemini</label></fieldset>
-      <fieldset><legend>Язык карточек</legend><label><input type="radio" name="knowledge_language" value="en" checked> English</label><label><input type="radio" name="knowledge_language" value="ru"> Русский</label><label><input type="radio" name="knowledge_language" value="source"> Как в источнике</label></fieldset>
-      <label>Ollama model<input name="ollama_model" value="qwen3:8b"></label>
-      <label>Ollama URL<input name="ollama_url" value="http://localhost:11434"></label>
-      <label>Ollama timeout<input type="number" name="ollama_timeout" value="120"></label>
-      <label>Gemini model<input name="gemini_model" value="gemini-3.1-flash-lite"></label>
-      <p class="hint">GEMINI_API_KEY {{ 'detected' if gemini_key_detected else 'is not configured' }}</p>
-      <label>Frames per card<input type="number" min="1" max="20" name="frames_per_card" value="5"></label>
-      <label>Image policy<select name="image_policy"><option>auto</option><option>always</option><option>never</option></select></label>
-      <label class="check"><input type="checkbox" name="force" value="true"> Force</label>
+      <label>Язык речи<input name="language" placeholder="Автоматически"></label>
+      <label>Модель распознавания<input name="model" value="small"></label>
+      <label>Устройство<select name="device"><option>auto</option><option>cuda</option><option>cpu</option></select></label>
     </div>
   </details>
-  <button class="primary" type="submit">Запустить конвейер</button>
-  <p class="safety">Эта кнопка никогда не создаёт .apkg</p>
 </form>
-{% if projects %}<section class="panel"><h2>Существующие проекты</h2><div class="project-list">
-{% for project in projects %}<article><strong>{{ project.name }}</strong><span>Review: {{ project.review or 'не создан' }}</span><span>Колода: {{ 'есть' if project.deck else 'нет' }}</span></article>{% endfor %}
+
+<section class="workflow-preview" aria-label="Как это работает">
+  <article><span>1</span><h2>Транскрипция</h2><p>Получите текст видео с таймкодами.</p></article>
+  <article><span>2</span><h2>NotebookLM</h2><p>Создайте карточки с вашим промптом.</p></article>
+  <article><span>3</span><h2>Кадры и Anki</h2><p>Подберите изображения, проверьте и экспортируйте колоду.</p></article>
+</section>
+
+{% if projects %}<section class="panel project-panel"><h2>Недавние проекты</h2><div class="project-list">
+{% for project in projects %}<article><strong>{{ project.name }}</strong><span>Проверка: {{ project.review or 'не начата' }}</span><span>Колода: {{ 'готова' if project.deck else 'ещё не собрана' }}</span></article>{% endfor %}
 </div></section>{% endif %}
 {% endblock %}
