@@ -50,7 +50,7 @@ def test_recent_project_is_openable(tmp_path):
 
     page = client.get(opened.headers["location"])
     assert "Скопировать промпт" in page.text
-    assert "Create a small, high-quality set of Anki cards" in page.text
+    assert "Create Anki cards from the important Japanese grammar" in page.text
 
 
 def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
@@ -67,8 +67,8 @@ def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
     assert "content-disposition" not in response.headers
-    assert "CARD SELECTION RULES" in response.text
-    assert "Never insert spaces inside Japanese words or particles" in response.text
+    assert "CARD RULES" in response.text
+    assert "Do not insert spaces inside Japanese words or particles" in response.text
 
 
 def test_notebooklm_cards_can_be_imported_from_pasted_text(tmp_path):
