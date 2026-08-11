@@ -67,6 +67,7 @@ button:active, .primary:active, .secondary:active { transform: scale(.97); }
 .prompt-copy textarea { min-height: 13rem; font: .82rem/1.45 ui-monospace, "Cascadia Code", monospace; }
 .copy-row { display: flex; align-items: center; gap: .8rem; }
 .import-form { display: grid; gap: 1rem; max-width: 31rem; }
+.import-form .or { padding: 0; text-align: center; }
 .hidden, [hidden] { display: none !important; }
 .error { color: var(--red); }
 .saved { color: var(--green); }

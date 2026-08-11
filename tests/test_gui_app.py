@@ -28,6 +28,8 @@ def test_job_ui_guides_notebooklm_handoff():
     assert "navigator.clipboard.writeText" in template
     assert 'id="notebooklm-prompt"' in template
     assert 'name="cards_file"' in template
+    assert 'name="cards_text"' in template
+    assert 'name="cards_file" type="file" accept=".txt,text/plain" required' not in template
     assert 'name="frames_per_card" value="5"' in template
 
 
@@ -48,7 +50,7 @@ def test_recent_project_is_openable(tmp_path):
 
     page = client.get(opened.headers["location"])
     assert "Скопировать промпт" in page.text
-    assert "You are selecting and designing high-quality Anki cards" in page.text
+    assert "Create a small, high-quality set of Anki cards" in page.text
 
 
 def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
@@ -65,6 +67,53 @@ def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
     assert "content-disposition" not in response.headers
+    assert "CARD SELECTION RULES" in response.text
+    assert "Never insert spaces inside Japanese words or particles" in response.text
+
+
+def test_notebooklm_cards_can_be_imported_from_pasted_text(tmp_path):
+    output = tmp_path / "output" / "lesson"
+    output.mkdir(parents=True)
+    (output / "transcript.json").write_text(
+        '{"source":"lesson.mp4","segments":[{"id":1,"start":0,"end":3,"text":"今日は寒い。"}]}',
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+    opened = client.get("/projects/lesson", follow_redirects=False)
+
+    response = client.post(
+        f'{opened.headers["location"]}/notebooklm-cards',
+        data={
+            "csrf": token,
+            "cards_text": "1 | application | Complete: 今日[きょう]は ... 寒[さむ]い。 | より",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert (output / "card_candidates.json").is_file()
+
+
+def test_notebooklm_import_requires_exactly_one_input(tmp_path):
+    output = tmp_path / "output" / "lesson"
+    output.mkdir(parents=True)
+    (output / "transcript.json").write_text(
+        '{"source":"lesson.mp4","segments":[{"id":1,"start":0,"end":3,"text":"test"}]}',
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+    opened = client.get("/projects/lesson", follow_redirects=False)
+
+    response = client.post(
+        f'{opened.headers["location"]}/notebooklm-cards',
+        data={"csrf": token, "cards_text": "1 | recall | Question? | Answer"},
+        files={"cards_file": ("cards.txt", b"1 | recall | Other? | Other", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert "не оба сразу" in response.text
 
 
 def test_review_ui_uses_candidate_thumbnails_and_non_sticky_toolbar():

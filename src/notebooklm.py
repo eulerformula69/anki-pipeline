@@ -5,7 +5,6 @@ import re
 from pathlib import Path
 
 from .models import CardCandidate, CardCandidateCollection, TranscriptSegment
-from .prompt_policy import LEARNING_CONTENT_POLICY
 from .semantic import save_json_atomic
 
 
@@ -23,44 +22,131 @@ _STOPWORDS = {
 
 LEARNING_GOALS = {"recall", "application", "discrimination", "cloze"}
 
-NOTEBOOKLM_PROMPT = f"""You are selecting and designing high-quality Anki cards from a source.
+NOTEBOOKLM_PROMPT = """Create a small, high-quality set of Anki cards from the Japanese grammar material in the provided sources.
 
-{LEARNING_CONTENT_POLICY}
+The goal is not to cover every point. Select only transferable knowledge that is genuinely useful for understanding or producing Japanese. Prefer fewer strong cards over many weak cards.
 
-First decide whether each possible learning item deserves a card. Fewer strong cards are
-better than complete coverage. Do not retell or summarize the source, and do not create a
-card for every stated idea. Each card must train exactly one clear, objectively assessable
-retrieval action. Prefer application and discrimination over memorizing definitions.
+CARD SELECTION RULES
 
-For every retained item, choose exactly one learning goal:
-- recall: retrieve one necessary fact, rule, term, or concise explanation;
-- application: apply a rule or concept to a concrete case;
-- discrimination: distinguish easily confused concepts, cases, or constructions;
-- cloze: supply one unambiguous missing element from sufficient context. Use sparingly.
+- One card must test exactly one clear retrieval target.
+- Do not create cards from introductions, anecdotes, repetition, biography, or meta-commentary.
+- Do not create a card merely because something was mentioned in the source.
+- Avoid cards about literal meanings or terminology unless that knowledge is independently useful or necessary for understanding the grammar.
+- Prefer practical usage and distinctions between similar constructions over abstract definitions.
+- Do not duplicate the same knowledge across several cards.
+- When uncertain whether a card is useful, omit it.
+- Every claim and example must be supported by the provided sources. Do not introduce unrelated grammar.
 
-An application card must require actual application, not merely ask for a definition.
-A discrimination card should present a meaningful contrast or minimal pair. Avoid answers
-that require reproducing long lists, and never reveal the answer in the question.
+CARD TYPES
 
-For Japanese learning material, prefer concrete Japanese application examples and minimal
-pairs. Use terminology cards only when the term is needed for later understanding. Use
-cloze for particles or grammar only when the context permits one unambiguous answer.
+Use exactly one of these types:
 
-Output format:
-Return plain text suitable for import into an Anki pipeline.
-Write one flashcard per line.
-Use exactly this separator format: id | type | question | answer
-Start IDs at 1 and increment by 1. Type must be recall, application, discrimination, or cloze.
-Do not include a header row, numbering outside the id field, extra columns, or Markdown.
-Do not use the pipe character inside a question or answer.
-Write questions and answers in English.
-Use kana, furigana and kanji for Japanese educating materials.
-put furigana in [ ] brackets.
-place space in front of word with furigana. example:  急[いそ]いでいる 時[とき]に 限[かぎ]ってバスが 遅[おく]れる。 今日[きょう]は 日本語能力試験[にほんごのうりょくしけん]を 受[う]けた。
-do not use furigana for hiragana and katakana - い[い]る is prohibited
-Do not use romanji for japanese
-Do NOT use ANY Markdown formatting (including **, *, _, #, backticks, lists, tables).
-Return the final result as a .txt file ready for upload.
+1. application
+
+The learner must complete or use a Japanese construction in a concrete, natural context.
+
+Requirements:
+
+- Use a complete, natural Japanese sentence.
+- Include enough context to determine the intended answer.
+- The blank must have one clearly expected answer.
+- If other natural answers remain possible, explicitly identify the target construction in the English instruction.
+- Do not use fragments such as `減る ...` when a complete sentence such as `この町の人口は減る ...` is possible.
+
+Good example:
+
+`application | Complete using より: 今日はいつも ... 寒[さむ]い。 | より`
+
+Bad example:
+
+`application | Complete: 減[へ]る ... | 一方[いっぽう]だ`
+
+2. discrimination
+
+The learner must distinguish between two or more similar constructions.
+
+Requirements:
+
+- The question must contain competing alternatives or a minimal pair.
+- A question that merely asks for the definition of one particle is recall, not discrimination.
+- Prefer concrete Japanese examples over theoretical descriptions.
+
+Good example:
+
+`discrimination | Choose から or より for each blank: 東京 ... 大阪まで行く。／今日は昨日 ... 寒[さむ]い。 | から／より`
+
+Bad example:
+
+`discrimination | Which particle marks a starting point? | から`
+
+3. recall
+
+Use only when a fact or meaning is genuinely worth recalling independently.
+
+Requirements:
+
+- Do not use recall merely to increase the number of cards.
+- Avoid asking for literal meanings that do not improve comprehension or usage.
+- Prefer application or discrimination when the learner should know how a construction behaves.
+
+4. cloze
+
+Use when a short, natural sentence has one unambiguous missing element.
+
+Requirements:
+
+- The surrounding context must make the answer clear.
+- Do not use cloze when several particles or expressions could naturally fit.
+- Use only one meaningful blank per card.
+
+JAPANESE QUALITY RULES
+
+- Use complete and natural Japanese sentences.
+- Preserve the meaning taught by the source.
+- Do not write misleading English descriptions such as “the side of Sakura is pretty” for `サクラの方が綺麗だ`.
+- When teaching a comparison with `方`, include or clearly imply both alternatives.
+- Distinguish functions such as `一方で` for contrast and `一方だ` for continuing change.
+- Add furigana to kanji as `漢字[かんじ]`.
+- Do not use romaji.
+- Never insert spaces inside Japanese words or particles: write `から`, not `か ら`; `より`, not `よ り`.
+- Do not add decorative spaces around Japanese text.
+
+FINAL QUALITY CHECK
+
+Before outputting each card, silently verify:
+
+- Is this knowledge worth remembering?
+- Does the card test exactly one thing?
+- Does its declared type match the actual memory task?
+- Is the Japanese natural and complete?
+- Is the expected answer objectively clear?
+- Could another natural answer fit the blank?
+- Does another card already test the same knowledge?
+- Would the learner understand exactly what counts as a correct answer?
+
+Rewrite or omit any card that fails these checks.
+
+OUTPUT FORMAT
+
+Output only the finished cards. Do not include explanations, headings, Markdown, commentary, or a code block.
+
+Use exactly four fields separated by ` | `:
+
+id | type | question | answer
+
+Allowed types:
+
+recall
+application
+discrimination
+cloze
+
+Number IDs consecutively starting from 1.
+
+Example:
+
+1 | application | Complete using より: 今日[きょう]はいつも ... 寒[さむ]い。 | より
+2 | discrimination | Choose 一方[いっぽう]で or 一方[いっぽう]だ: この町[まち]の人口[じんこう]は減[へ]る ...。／この町[まち]は静[しず]かな ...、不便[ふべん]でもある。 | 一方[いっぽう]だ／一方[いっぽう]で
 """
 
 

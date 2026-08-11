@@ -284,17 +284,29 @@ async def import_cards_from_notebooklm(
     request: Request,
     job_id: str,
     csrf: Annotated[str, Form()],
-    cards_file: Annotated[UploadFile, File()],
+    cards_file: Annotated[UploadFile | None, File()] = None,
+    cards_text: Annotated[str, Form()] = "",
     frames_per_card: Annotated[int, Form()] = 5,
     image_policy: Annotated[str, Form()] = "auto",
 ):
     _check_csrf(request, csrf)
     state = _job(request, job_id)
     output = _safe_output(state, request.app.state.root)
-    if not cards_file.filename or Path(cards_file.filename).suffix.lower() != ".txt":
-        return _render(request, "error.html", {"message": "Загрузите .txt файл из NotebookLM."}, 422)
-    data = await cards_file.read(2 * 1024 * 1024 + 1)
-    await cards_file.close()
+    pasted_text = cards_text.strip()
+    has_file = bool(cards_file and cards_file.filename)
+    if has_file and pasted_text:
+        return _render(request, "error.html", {"message": "Вставьте текст или загрузите файл — не оба сразу."}, 422)
+    if not has_file and not pasted_text:
+        return _render(request, "error.html", {"message": "Вставьте ответ NotebookLM или загрузите .txt файл."}, 422)
+    if has_file:
+        assert cards_file is not None
+        if Path(cards_file.filename or "").suffix.lower() != ".txt":
+            await cards_file.close()
+            return _render(request, "error.html", {"message": "Загрузите .txt файл из NotebookLM."}, 422)
+        data = await cards_file.read(2 * 1024 * 1024 + 1)
+        await cards_file.close()
+    else:
+        data = pasted_text.encode("utf-8")
     if len(data) > 2 * 1024 * 1024:
         return _render(request, "error.html", {"message": "Файл карточек больше 2 МБ."}, 422)
     try:
