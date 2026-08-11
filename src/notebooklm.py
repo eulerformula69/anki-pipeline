@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any
 
 from .models import CardCandidate, CardCandidateCollection, TranscriptSegment
+from .prompt_policy import LEARNING_CONTENT_POLICY
 from .semantic import save_json_atomic
 
 
@@ -16,31 +15,52 @@ class NotebookLMImportError(ValueError):
 
 _WORD = re.compile(r"[\w']{3,}", re.UNICODE)
 _JAPANESE = re.compile(r"[一-龯々〆ヵヶぁ-ゟ゠-ヿ]{1,}")
-_SAFE_ID = re.compile(r"[^A-Za-z0-9_.-]+")
 _STOPWORDS = {
     "about", "after", "answer", "are", "card", "does", "each", "for", "from",
     "have", "how", "into", "make", "question", "should", "that", "the", "this",
     "what", "when", "which", "with", "would", "your",
 }
 
-NOTEBOOKLM_PROMPT = """How many Anki cards (except vocab, but sentences allowed) should I make out of this source?
+LEARNING_GOALS = {"recall", "application", "discrimination", "cloze"}
 
-Make Anki cards with these grammar points according to this format:
+NOTEBOOKLM_PROMPT = f"""You are selecting and designing high-quality Anki cards from a source.
 
-Output Format:
-.txt file
-Output in English.
-Each flashcard on a new line.
-Use the pipe (|) separator: id | question | answer
-Start IDs at 2351, then increment by 1 for each card.
-Do not include a header row (\"Question\", \"Answer\").
+{LEARNING_CONTENT_POLICY}
+
+First decide whether each possible learning item deserves a card. Fewer strong cards are
+better than complete coverage. Do not retell or summarize the source, and do not create a
+card for every stated idea. Each card must train exactly one clear, objectively assessable
+retrieval action. Prefer application and discrimination over memorizing definitions.
+
+For every retained item, choose exactly one learning goal:
+- recall: retrieve one necessary fact, rule, term, or concise explanation;
+- application: apply a rule or concept to a concrete case;
+- discrimination: distinguish easily confused concepts, cases, or constructions;
+- cloze: supply one unambiguous missing element from sufficient context. Use sparingly.
+
+An application card must require actual application, not merely ask for a definition.
+A discrimination card should present a meaningful contrast or minimal pair. Avoid answers
+that require reproducing long lists, and never reveal the answer in the question.
+
+For Japanese learning material, prefer concrete Japanese application examples and minimal
+pairs. Use terminology cards only when the term is needed for later understanding. Use
+cloze for particles or grammar only when the context permits one unambiguous answer.
+
+Output format:
+Return plain text suitable for import into an Anki pipeline.
+Write one flashcard per line.
+Use exactly this separator format: id | type | question | answer
+Start IDs at 1 and increment by 1. Type must be recall, application, discrimination, or cloze.
+Do not include a header row, numbering outside the id field, extra columns, or Markdown.
+Do not use the pipe character inside a question or answer.
+Write questions and answers in English.
 Use kana, furigana and kanji for Japanese educating materials.
 put furigana in [ ] brackets.
 place space in front of word with furigana. example:  急[いそ]いでいる 時[とき]に 限[かぎ]ってバスが 遅[おく]れる。 今日[きょう]は 日本語能力試験[にほんごのうりょくしけん]を 受[う]けた。
 do not use furigana for hiragana and katakana - い[い]る is prohibited
 Do not use romanji for japanese
 Do NOT use ANY Markdown formatting (including **, *, _, #, backticks, lists, tables).
-Return the final result as a .txt file ready for import into Anki.
+Return the final result as a .txt file ready for upload.
 """
 
 
@@ -91,25 +111,31 @@ def _source_ids(front: str, back: str, segments: list[TranscriptSegment]) -> lis
     return [segment_id for score, segment_id in scored if score == best][:1]
 
 
-def _read_lines(text: str) -> list[tuple[str, str, str]]:
-    cards: list[tuple[str, str, str]] = []
+def _read_lines(text: str) -> list[tuple[str, str, str, str]]:
+    cards: list[tuple[str, str, str, str]] = []
     seen: set[str] = set()
     for line_number, raw in enumerate(text.lstrip("\ufeff").splitlines(), 1):
         line = raw.strip()
         if not line:
             continue
-        parts = [part.strip() for part in line.split("|", 2)]
-        if len(parts) != 3 or not all(parts):
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) != 4 or not all(parts):
             raise NotebookLMImportError(
-                f"Строка {line_number}: ожидаются три поля в формате id | question | answer."
+                f"Строка {line_number}: используйте id | type | question | answer."
             )
-        external_id, front, back = parts
-        if line_number == 1 and external_id.casefold() == "id" and front.casefold() == "question":
+        external_id, card_type, front, back = parts
+        card_type = card_type.casefold()
+        if line_number == 1 and external_id.casefold() == "id" and card_type == "type":
             continue
         if external_id in seen:
             raise NotebookLMImportError(f"Строка {line_number}: повторяющийся id {external_id!r}.")
+        if card_type not in LEARNING_GOALS:
+            raise NotebookLMImportError(
+                f"Строка {line_number}: неизвестный type {card_type!r}; "
+                "ожидается recall, application, discrimination или cloze."
+            )
         seen.add(external_id)
-        cards.append((external_id, front, back))
+        cards.append((external_id, card_type, front, back))
     if not cards:
         raise NotebookLMImportError("В файле не найдено ни одной карточки.")
     return cards
@@ -119,19 +145,12 @@ def import_notebooklm_cards(text: str, transcript_path: Path, destination: Path)
     source, segments = _load_transcript(transcript_path)
     imported = _read_lines(text)
     candidates: list[CardCandidate] = []
-    used_ids: set[str] = set()
-    for position, (external_id, front, back) in enumerate(imported, 1):
-        stem = _SAFE_ID.sub("-", external_id).strip(".-") or str(position)
-        card_id = f"n_{stem}"
-        suffix = 2
-        while card_id in used_ids:
-            card_id = f"n_{stem}-{suffix}"
-            suffix += 1
-        used_ids.add(card_id)
+    for position, (external_id, card_type, front, back) in enumerate(imported, 1):
+        card_id = f"n_{position:04d}"
         candidates.append(CardCandidate(
-            card_id=card_id, knowledge_ids=[f"notebooklm_{external_id}"], card_type="basic",
+            card_id=card_id, knowledge_ids=[f"notebooklm_{external_id}"], card_type=card_type,
             front=front, back=back, extra="", difficulty=3, importance=3,
-            tags=["notebooklm"], source_transcript_segment_ids=_source_ids(front, back, segments),
+            tags=["notebooklm", card_type], source_transcript_segment_ids=_source_ids(front, back, segments),
             expression_ids=[],
         ))
     result = CardCandidateCollection(source, "notebooklm-import-v1", candidates)

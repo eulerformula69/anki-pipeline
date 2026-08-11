@@ -71,6 +71,7 @@ button:active, .primary:active, .secondary:active { transform: scale(.97); }
 .review-card form { display: grid; gap: .75rem; }
 .review-card.excluded { opacity: .58; }
 .card-head span { margin-left: .5rem; color: var(--muted); }
+.card-head .card-type-badge { display: inline-block; padding: .2rem .48rem; border-radius: 999px; background: #e4ebe5; color: #31583e; font-size: .7rem; font-weight: 700; letter-spacing: .04em; }
 .media-box { display: grid; align-content: start; gap: .65rem; }
 .media-box > img { width: 100%; max-height: 18.75rem; object-fit: contain; border-radius: .65rem; background: #20241f; }
 .candidate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }

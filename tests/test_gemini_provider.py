@@ -136,3 +136,17 @@ def test_per_minute_quota_stops_after_retry_budget(monkeypatch) -> None:
     with pytest.raises(LLMError, match="per-minute rate limit"):
         value.generate_json("prompt", schema={"type": "object"})
     assert len(models.calls) == 1
+
+
+def test_daily_free_tier_quota_is_not_retried_despite_retry_info(monkeypatch) -> None:
+    error = APIError(
+        429,
+        "Quota exceeded for generate_content_free_tier_requests; "
+        "quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier; retry in 59s",
+    )
+    value, models = provider(monkeypatch, [error, "{}"], max_retries=3)
+
+    with pytest.raises(LLMError, match="daily free-tier quota"):
+        value.generate_json("prompt", schema={"type": "object"})
+
+    assert len(models.calls) == 1

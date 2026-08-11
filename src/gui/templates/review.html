@@ -9,7 +9,7 @@
 {% for card in cards %}<article class="review-card {% if not card.included %}excluded{% endif %}" id="{{ card.card_id }}" data-included="{{ card.included|lower }}" data-changed="{{ card.changed|lower }}" data-reviewed="{{ card.reviewed|lower }}" data-image="{{ (card.image or {}).get('mode','none') }}">
   <form class="card-editor" hx-post="/jobs/{{ job.job_id }}/review/cards/{{ card.card_id }}" hx-target="#save-{{ card.card_id }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <div class="card-head"><div><b>{{ card.card_id }}</b><span>{{ card.meta.card_type }}</span></div><label class="check"><input type="checkbox" name="included" value="true" {% if card.included %}checked{% endif %}> Включить в колоду</label></div>
+    <div class="card-head"><div><b>{{ card.card_id }}</b><span class="card-type-badge card-type-{{ card.meta.card_type }}">{{ card.meta.card_type|upper }}</span></div><label class="check"><input type="checkbox" name="included" value="true" {% if card.included %}checked{% endif %}> Включить в колоду</label></div>
     <label>Front<textarea name="front" required>{{ card.front }}</textarea></label>
     <label>Back<textarea name="back" required>{{ card.back }}</textarea></label>
     <label>Extra<textarea name="extra">{{ card.extra }}</textarea></label>

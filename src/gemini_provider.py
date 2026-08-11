@@ -68,6 +68,15 @@ def _retry_delay_seconds(exc: BaseException) -> float | None:
     return None
 
 
+def _is_non_retryable_quota(message: str) -> bool:
+    """Recognize daily/free-tier exhaustion even when Google includes RetryInfo."""
+    compact = re.sub(r"[^a-z0-9]", "", message.lower())
+    return any(marker in compact for marker in (
+        "freetierrequests",
+        "requestsperday",
+    ))
+
+
 @dataclass
 class GeminiProvider:
     model: str
@@ -143,7 +152,8 @@ class GeminiProvider:
                 code = _status_code(exc)
                 message = str(exc).lower()
                 retry_delay = _retry_delay_seconds(exc)
-                minute_rate_limit = code == 429 and (
+                non_retryable_quota = code == 429 and _is_non_retryable_quota(message)
+                minute_rate_limit = code == 429 and not non_retryable_quota and (
                     retry_delay is not None
                     or "requestsperminute" in message
                     or "per minute" in message
@@ -155,6 +165,12 @@ class GeminiProvider:
                     raise LLMError(
                         "Gemini per-minute rate limit remained active after retries. "
                         "Wait a minute and restart the failed stage."
+                    ) from exc
+                if non_retryable_quota:
+                    raise LLMError(
+                        "Gemini daily free-tier quota is exhausted for this model. "
+                        "Retrying in a minute will not help. Wait for the quota reset, enable billing, "
+                        "select Ollama, or choose another Gemini model."
                     ) from exc
                 if code == 429 and ("quota" in message or "resource_exhausted" in message):
                     raise LLMError(

@@ -18,15 +18,17 @@ def test_import_preserves_notebooklm_text_and_links_the_best_transcript_segment(
     write_transcript(transcript)
 
     result = import_notebooklm_cards(
-        "2351 | What is the past tense of go? | The past tense of go is went.\n",
+        "1 | application | Complete: Yesterday I ___ home. | went\n",
         transcript, destination,
     )
 
     card = result.card_candidates[0]
-    assert card.card_id == "n_2351"
-    assert card.front == "What is the past tense of go?"
-    assert card.back == "The past tense of go is went."
-    assert card.source_transcript_segment_ids == [1]
+    assert card.card_id == "n_0001"
+    assert card.front == "Complete: Yesterday I ___ home."
+    assert card.back == "went"
+    assert card.card_type == "application"
+    assert card.tags == ["notebooklm", "application"]
+    assert card.source_transcript_segment_ids == [2]
     assert json.loads(destination.read_text(encoding="utf-8"))["model"] == "notebooklm-import-v1"
 
 
@@ -34,5 +36,30 @@ def test_import_rejects_malformed_lines(tmp_path):
     transcript = tmp_path / "transcript.json"
     write_transcript(transcript)
 
-    with pytest.raises(NotebookLMImportError, match="три поля"):
-        import_notebooklm_cards("2351 | only a question\n", transcript, tmp_path / "cards.json")
+    with pytest.raises(NotebookLMImportError, match="id"):
+        import_notebooklm_cards("only a question\n", transcript, tmp_path / "cards.json")
+
+
+def test_import_preserves_learning_goals_and_assigns_its_own_ids(tmp_path):
+    transcript = tmp_path / "transcript.json"
+    write_transcript(transcript)
+
+    result = import_notebooklm_cards(
+        "source-a | recall | What is went? | The past tense of go.\n"
+        "source-b | discrimination | Which form marks past tense: go or went? | went\n",
+        transcript, tmp_path / "cards.json",
+    )
+
+    assert [card.card_id for card in result.card_candidates] == ["n_0001", "n_0002"]
+    assert all(card.extra == "" for card in result.card_candidates)
+    assert [card.card_type for card in result.card_candidates] == ["recall", "discrimination"]
+
+
+def test_import_rejects_unknown_learning_goal(tmp_path):
+    transcript = tmp_path / "transcript.json"
+    write_transcript(transcript)
+
+    with pytest.raises(NotebookLMImportError, match="неизвестный type"):
+        import_notebooklm_cards(
+            "1 | basic | Question? | Answer\n", transcript, tmp_path / "cards.json"
+        )
