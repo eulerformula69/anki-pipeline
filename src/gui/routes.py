@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.templating import Jinja2Templates
 
 from ..paths import build_result_paths
-from ..notebooklm import NOTEBOOKLM_PROMPT, NotebookLMImportError, import_notebooklm_cards
+from ..notebooklm import NotebookLMImportError, get_notebooklm_prompt, import_notebooklm_cards
 from ..source_ingest import SourceIngestError, prepare_source
 from .review_store import ReviewError, normalize_uploaded_image
 from .schemas import PipelineRunRequest, STAGES, STAGE_LABELS
@@ -222,7 +222,7 @@ def job_page(request: Request, job_id: str):
     return _render(request, "job.html", {
         "job": state,
         "labels": STAGE_LABELS,
-        "notebooklm_prompt": NOTEBOOKLM_PROMPT,
+        "notebooklm_prompt": get_notebooklm_prompt(),
     })
 
 
@@ -276,7 +276,7 @@ def download_transcript(request: Request, job_id: str):
 @router.get("/jobs/{job_id}/notebooklm-prompt")
 def download_notebooklm_prompt(request: Request, job_id: str):
     _job(request, job_id)
-    return PlainTextResponse(NOTEBOOKLM_PROMPT)
+    return PlainTextResponse(get_notebooklm_prompt())
 
 
 @router.post("/jobs/{job_id}/notebooklm-cards")
