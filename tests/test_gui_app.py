@@ -23,9 +23,48 @@ def test_job_ui_guides_notebooklm_handoff():
     template = (Path(__file__).parents[1] / "src" / "gui" / "templates" / "job.html").read_text(encoding="utf-8")
 
     assert "Скачать транскрипцию" in template
-    assert "Скачать промпт" in template
+    assert "Скачать промпт" not in template
+    assert "Скопировать промпт" in template
+    assert "navigator.clipboard.writeText" in template
+    assert 'id="notebooklm-prompt"' in template
     assert 'name="cards_file"' in template
     assert 'name="frames_per_card" value="5"' in template
+
+
+def test_recent_project_is_openable(tmp_path):
+    output = tmp_path / "output" / "lesson"
+    output.mkdir(parents=True)
+    (output / "transcript.json").write_text(
+        '{"source":"lesson.mp4","segments":[]}', encoding="utf-8"
+    )
+    client = TestClient(create_app(root=tmp_path))
+
+    index = client.get("/")
+    assert 'class="project-row" href="/projects/lesson"' in index.text
+
+    opened = client.get("/projects/lesson", follow_redirects=False)
+    assert opened.status_code == 303
+    assert opened.headers["location"].startswith("/jobs/")
+
+    page = client.get(opened.headers["location"])
+    assert "Скопировать промпт" in page.text
+    assert "You are selecting and designing high-quality Anki cards" in page.text
+
+
+def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
+    output = tmp_path / "output" / "lesson"
+    output.mkdir(parents=True)
+    (output / "transcript.json").write_text(
+        '{"source":"lesson.mp4","segments":[]}', encoding="utf-8"
+    )
+    client = TestClient(create_app(root=tmp_path))
+    opened = client.get("/projects/lesson", follow_redirects=False)
+    job_url = opened.headers["location"]
+
+    response = client.get(f"{job_url}/notebooklm-prompt")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "content-disposition" not in response.headers
 
 
 def test_review_ui_uses_candidate_thumbnails_and_non_sticky_toolbar():

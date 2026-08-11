@@ -36,6 +36,6 @@
 </section>
 
 {% if projects %}<section class="panel project-panel"><h2>Недавние проекты</h2><div class="project-list">
-{% for project in projects %}<article><strong>{{ project.name }}</strong><span>Проверка: {{ project.review or 'не начата' }}</span><span>Колода: {{ 'готова' if project.deck else 'ещё не собрана' }}</span></article>{% endfor %}
+{% for project in projects %}<a class="project-row" href="{{ project.url }}"><strong>{{ project.name }}</strong><span>Проверка: {{ project.review or 'не начата' }}</span><span>Колода: {{ 'готова' if project.deck else 'ещё не собрана' }}</span><span class="project-open">Открыть →</span></a>{% endfor %}
 </div></section>{% endif %}
 {% endblock %}

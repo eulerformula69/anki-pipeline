@@ -15,10 +15,14 @@
   <section id="notebooklm-flow" class="notebooklm-flow {% if job.status != 'completed' %}hidden{% endif %}">
     <p class="step-number">Шаг 2 из 3</p>
     <h2>Создайте карточки в NotebookLM</h2>
-    <p>Сначала скачайте оба файла. Загрузите транскрипцию в NotebookLM, вставьте промпт, затем верните сюда полученный файл карточек.</p>
+    <p>Скачайте транскрипцию, загрузите её в NotebookLM, скопируйте промпт ниже, затем верните сюда полученный файл карточек.</p>
     <div class="download-actions">
       <a class="secondary" href="/jobs/{{ job.job_id }}/transcript">1. Скачать транскрипцию</a>
-      <a class="secondary" href="/jobs/{{ job.job_id }}/notebooklm-prompt">2. Скачать промпт</a>
+    </div>
+    <div class="prompt-copy">
+      <label for="notebooklm-prompt">2. Промпт для NotebookLM</label>
+      <textarea id="notebooklm-prompt" readonly>{{ notebooklm_prompt }}</textarea>
+      <div class="copy-row"><button id="copy-prompt" type="button">Скопировать промпт</button><span id="copy-status" class="saved" role="status" aria-live="polite"></span></div>
     </div>
     <form class="import-form" method="post" action="/jobs/{{ job.job_id }}/notebooklm-cards" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -33,6 +37,21 @@
 const stream = new EventSource('/jobs/{{ job.job_id }}/events');
 const notebookFlow = document.querySelector('#notebooklm-flow');
 const reviewLink = document.querySelector('#review-link');
+const promptField = document.querySelector('#notebooklm-prompt');
+const copyButton = document.querySelector('#copy-prompt');
+const copyStatus = document.querySelector('#copy-status');
+copyButton.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(promptField.value);
+  } catch (_) {
+    promptField.select();
+    document.execCommand('copy');
+    promptField.setSelectionRange(0, 0);
+  }
+  copyStatus.textContent = 'Скопировано';
+  copyButton.textContent = 'Готово';
+  window.setTimeout(() => { copyButton.textContent = 'Скопировать промпт'; copyStatus.textContent = ''; }, 1800);
+});
 stream.onmessage = ({data}) => {
   const j = JSON.parse(data);
   status.textContent = j.status;

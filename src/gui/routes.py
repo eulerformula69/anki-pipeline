@@ -114,6 +114,11 @@ def index(request: Request):
     root = request.app.state.root
     projects = []
     output_root = root / "output"
+    known_jobs = getattr(request.app.state.jobs, "jobs", {})
+    jobs_by_output = {
+        Path(state.output_directory).resolve(): state
+        for state in known_jobs.values()
+    }
     for directory in output_root.iterdir() if output_root.exists() else []:
         if not directory.is_dir() or not any((directory / name).exists() for name in ("transcript.json", "card_candidates.json", "approved_cards.json")):
             continue
@@ -122,7 +127,15 @@ def index(request: Request):
             review = json.loads((directory / "approved_cards.json").read_text(encoding="utf-8")) if (directory / "approved_cards.json").exists() else None
         except (OSError, json.JSONDecodeError):
             pass
-        projects.append({"name": directory.name, "modified": directory.stat().st_mtime, "review": review and review.get("status"), "deck": any(directory.glob("*.apkg"))})
+        state = jobs_by_output.get(directory.resolve())
+        projects.append({
+            "name": directory.name,
+            "modified": directory.stat().st_mtime,
+            "review": review and review.get("status"),
+            "deck": any(directory.glob("*.apkg")),
+            "url": f"/jobs/{state.job_id}" if state else f"/projects/{directory.name}",
+        })
+    projects.sort(key=lambda project: project["modified"], reverse=True)
     return _render(request, "index.html", {
         "stages": STAGE_LABELS, "projects": projects,
         "gemini_key_detected": bool(os.getenv("GEMINI_API_KEY")),
@@ -206,7 +219,49 @@ async def create_job(
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
 def job_page(request: Request, job_id: str):
     state = _job(request, job_id)
-    return _render(request, "job.html", {"job": state, "labels": STAGE_LABELS})
+    return _render(request, "job.html", {
+        "job": state,
+        "labels": STAGE_LABELS,
+        "notebooklm_prompt": NOTEBOOKLM_PROMPT,
+    })
+
+
+@router.get("/projects/{project_name}")
+def open_project(request: Request, project_name: str):
+    output_root = (request.app.state.root / "output").resolve()
+    output = (output_root / project_name).resolve()
+    if (
+        Path(project_name).name != project_name
+        or not output.is_relative_to(output_root)
+        or not output.is_dir()
+    ):
+        raise HTTPException(404, "Проект не найден.")
+    for state in getattr(request.app.state.jobs, "jobs", {}).values():
+        if Path(state.output_directory).resolve() == output:
+            destination = "review" if (output / "card_candidates.json").is_file() else ""
+            suffix = f"/{destination}" if destination else ""
+            return RedirectResponse(f"/jobs/{state.job_id}{suffix}", 303)
+
+    source = project_name
+    video = request.app.state.root / "input" / f"{project_name}.mp4"
+    try:
+        transcript = json.loads((output / "transcript.json").read_text(encoding="utf-8"))
+        source = str(transcript.get("source") or project_name)
+        candidate = Path(source)
+        if candidate.is_file():
+            video = candidate
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
+    state = request.app.state.jobs.register_existing(video, output)
+    state.source = Path(source).name or project_name
+    has_cards = (output / "card_candidates.json").is_file()
+    if not has_cards:
+        state.status = "completed"
+        state.completed_stages = ["transcription"]
+        state.progress_message = "Транскрипция готова"
+    destination = "review" if has_cards else ""
+    suffix = f"/{destination}" if destination else ""
+    return RedirectResponse(f"/jobs/{state.job_id}{suffix}", 303)
 
 
 @router.get("/jobs/{job_id}/transcript")
@@ -221,10 +276,7 @@ def download_transcript(request: Request, job_id: str):
 @router.get("/jobs/{job_id}/notebooklm-prompt")
 def download_notebooklm_prompt(request: Request, job_id: str):
     _job(request, job_id)
-    return PlainTextResponse(
-        NOTEBOOKLM_PROMPT,
-        headers={"Content-Disposition": 'attachment; filename="notebooklm-anki-prompt.txt"'},
-    )
+    return PlainTextResponse(NOTEBOOKLM_PROMPT)
 
 
 @router.post("/jobs/{job_id}/notebooklm-cards")
