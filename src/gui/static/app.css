@@ -78,6 +78,9 @@ button:active, .primary:active, .secondary:active { transform: scale(.97); }
 .review-toolbar h1 { font-size: 2rem; }
 .summary, .filters, .actions, .card-head { display: flex; gap: .85rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .review-card { display: grid; grid-template-columns: minmax(0, 2fr) minmax(13.75rem, 1fr); gap: 1.4rem; padding: 1.35rem; margin: 1rem 0; background: var(--paper); border: 1px solid var(--line); border-radius: 1rem; }
+.card-order { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: .4rem; margin-bottom: -1rem; }
+.card-order button { min-width: 2.8rem; padding: .45rem; font-size: 1.15rem; }
+.card-order button:disabled { cursor: default; opacity: .35; }
 .review-card form { display: grid; gap: .75rem; }
 .review-card.excluded { opacity: .58; }
 .card-head span { margin-left: .5rem; color: var(--muted); }

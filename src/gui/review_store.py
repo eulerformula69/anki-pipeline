@@ -127,6 +127,54 @@ class ReviewStore:
             atomic_json(review, path)
             return card
 
+    def add_blank_card(self, output: Path) -> str:
+        candidates_path = output / "card_candidates.json"
+        with self._lock(candidates_path):
+            candidates = self._read(candidates_path)
+            raw_cards = candidates.get("card_candidates")
+            if not isinstance(raw_cards, list):
+                raise ReviewError("card_candidates.json не содержит card_candidates.")
+            used_ids = {card.get("card_id") for card in raw_cards if isinstance(card, dict)}
+            position = 1
+            while (card_id := f"manual_{position:04d}") in used_ids:
+                position += 1
+            source_ids = next((
+                card.get("source_transcript_segment_ids")
+                for card in raw_cards
+                if isinstance(card, dict) and card.get("source_transcript_segment_ids")
+            ), [1])
+            raw_cards.append({
+                "card_id": card_id,
+                "knowledge_ids": [],
+                "card_type": "manual",
+                "front": "",
+                "back": "",
+                "extra": "",
+                "difficulty": 1,
+                "importance": 1,
+                "tags": ["manual"],
+                "source_transcript_segment_ids": deepcopy(source_ids),
+                "expression_ids": [],
+            })
+            atomic_json(candidates, candidates_path)
+        self.load_or_create(output)
+        return card_id
+
+    def move_card(self, output: Path, card_id: str, direction: str) -> None:
+        path = output / "approved_cards.json"
+        with self._lock(path):
+            review = self.load_or_create(output)
+            index = next((i for i, card in enumerate(review["cards"]) if card["card_id"] == card_id), None)
+            if index is None:
+                raise ReviewError("Неизвестный card_id.")
+            target = index - 1 if direction == "up" else index + 1 if direction == "down" else index
+            if target == index:
+                raise ReviewError("Неизвестное направление перемещения.")
+            if 0 <= target < len(review["cards"]):
+                review["cards"][index], review["cards"][target] = review["cards"][target], review["cards"][index]
+                review.update(status="draft", approved_at=None, updated_at=now_iso())
+                atomic_json(review, path)
+
     def approve(self, output: Path) -> dict[str, Any]:
         path = output / "approved_cards.json"
         with self._lock(path):

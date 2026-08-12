@@ -394,6 +394,38 @@ def save_card(
     return HTMLResponse('<span class="saved">Сохранено · review снова draft</span>')
 
 
+@router.post("/jobs/{job_id}/review/cards")
+def add_blank_card(request: Request, job_id: str, csrf: Annotated[str, Form()]):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    try:
+        card_id = request.app.state.reviews.add_blank_card(
+            _safe_output(state, request.app.state.root)
+        )
+    except ReviewError as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+
+
+@router.post("/jobs/{job_id}/review/cards/{card_id}/move")
+def move_card(
+    request: Request,
+    job_id: str,
+    card_id: str,
+    csrf: Annotated[str, Form()],
+    direction: Annotated[str, Form()],
+):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    try:
+        request.app.state.reviews.move_card(
+            _safe_output(state, request.app.state.root), card_id, direction
+        )
+    except ReviewError as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{job_id}/review#{card_id}", 303)
+
+
 @router.post("/jobs/{job_id}/review/cards/{card_id}/image-remove")
 def remove_image(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()]):
     _check_csrf(request, csrf)

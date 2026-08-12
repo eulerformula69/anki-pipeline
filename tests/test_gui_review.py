@@ -101,6 +101,24 @@ def test_regeneration_refreshes_only_untouched_review_cards(tmp_path):
     assert preserved["cards"][0]["front"] == "Manual question"
 
 
+def test_blank_card_is_added_and_cards_can_be_reordered(tmp_path):
+    output = project(tmp_path)
+    store = ReviewStore()
+    store.load_or_create(output)
+
+    card_id = store.add_blank_card(output)
+    review = store.load_or_create(output)
+
+    assert card_id == "manual_0001"
+    assert [card["card_id"] for card in review["cards"]] == ["c_1", "manual_0001"]
+    assert review["cards"][1]["front"] == ""
+
+    store.move_card(output, card_id, "up")
+    reordered = store.load_or_create(output)
+
+    assert [card["card_id"] for card in reordered["cards"]] == ["manual_0001", "c_1"]
+
+
 def test_image_action_returns_only_media_fragment_without_page_reload(tmp_path):
     output = tmp_path / "output" / "video"
     output.mkdir(parents=True, exist_ok=True)

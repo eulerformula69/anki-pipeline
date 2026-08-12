@@ -76,6 +76,9 @@ def test_review_ui_can_append_notebooklm_cards():
     assert "Добавить карточки из NotebookLM" in template
     assert 'name="append" value="true"' in template
     assert "Добавить и подобрать кадры" in template
+    assert "+ Карточка" in template
+    assert 'name="direction" value="up"' in template
+    assert 'name="direction" value="down"' in template
 
 
 def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
