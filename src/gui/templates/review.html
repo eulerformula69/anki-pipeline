@@ -5,6 +5,20 @@
   <div class="summary"><span>Всего <b>{{ summary.total }}</b></span><span>Включено <b>{{ summary.included }}</b></span><span>Не просмотрено <b>{{ summary.total-summary.reviewed }}</b></span><span>Без изображения <b>{{ summary.no_image }}</b></span></div>
   <div class="filters"><input id="search" placeholder="Поиск по тексту или ID"><select id="filter"><option value="all">Все</option><option value="included">Включённые</option><option value="excluded">Исключённые</option><option value="changed">Изменённые</option><option value="unreviewed">Не просмотренные</option><option value="noimage">Без изображения</option></select></div>
 </div>
+<details class="panel add-cards-panel">
+  <summary>Добавить карточки из NotebookLM</summary>
+  <p>Вставьте одну карточку или сразу весь новый пак. Существующие карточки и ваши правки сохранятся.</p>
+  <form class="import-form" method="post" action="/jobs/{{ job.job_id }}/notebooklm-cards" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="append" value="true">
+    <label>Ответ NotebookLM<small>Строки в формате ID | Тип | Вопрос | Ответ.</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
+    <div class="or" aria-hidden="true">или</div>
+    <label>Файл карточек из NotebookLM (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
+    <input type="hidden" name="frames_per_card" value="5">
+    <input type="hidden" name="image_policy" value="auto">
+    <button class="primary" type="submit">Добавить и подобрать кадры</button>
+  </form>
+</details>
 <div id="cards">
 {% for card in cards %}<article class="review-card {% if not card.included %}excluded{% endif %}" id="{{ card.card_id }}" data-included="{{ card.included|lower }}" data-changed="{{ card.changed|lower }}" data-reviewed="{{ card.reviewed|lower }}" data-image="{{ (card.image or {}).get('mode','none') }}">
   <form class="card-editor" hx-post="/jobs/{{ job.job_id }}/review/cards/{{ card.card_id }}" hx-target="#save-{{ card.card_id }}">

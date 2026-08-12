@@ -72,6 +72,9 @@ button:active, .primary:active, .secondary:active { transform: scale(.97); }
 .error { color: var(--red); }
 .saved { color: var(--green); }
 .review-toolbar { margin-bottom: 1rem; }
+.add-cards-panel { max-width: 48rem; margin: 0 auto 1rem; }
+.add-cards-panel summary { cursor: pointer; font-weight: 750; }
+.add-cards-panel[open] summary { margin-bottom: 1rem; }
 .review-toolbar h1 { font-size: 2rem; }
 .summary, .filters, .actions, .card-head { display: flex; gap: .85rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .review-card { display: grid; grid-template-columns: minmax(0, 2fr) minmax(13.75rem, 1fr); gap: 1.4rem; padding: 1.35rem; margin: 1rem 0; background: var(--paper); border: 1px solid var(--line); border-radius: 1rem; }

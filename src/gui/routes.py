@@ -133,7 +133,12 @@ def index(request: Request):
             "modified": directory.stat().st_mtime,
             "review": review and review.get("status"),
             "deck": any(directory.glob("*.apkg")),
-            "url": f"/jobs/{state.job_id}" if state else f"/projects/{directory.name}",
+            "url": (
+                f"/jobs/{state.job_id}/review"
+                if state and (directory / "card_candidates.json").is_file()
+                else f"/jobs/{state.job_id}" if state
+                else f"/projects/{directory.name}"
+            ),
         })
     projects.sort(key=lambda project: project["modified"], reverse=True)
     return _render(request, "index.html", {
@@ -219,6 +224,9 @@ async def create_job(
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
 def job_page(request: Request, job_id: str):
     state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    if (output / "card_candidates.json").is_file() and state.status not in {"queued", "running"}:
+        return RedirectResponse(f"/jobs/{job_id}/review", 303)
     return _render(request, "job.html", {
         "job": state,
         "labels": STAGE_LABELS,
@@ -288,6 +296,7 @@ async def import_cards_from_notebooklm(
     cards_text: Annotated[str, Form()] = "",
     frames_per_card: Annotated[int, Form()] = 5,
     image_policy: Annotated[str, Form()] = "auto",
+    append: Annotated[bool, Form()] = False,
 ):
     _check_csrf(request, csrf)
     state = _job(request, job_id)
@@ -310,7 +319,12 @@ async def import_cards_from_notebooklm(
     if len(data) > 2 * 1024 * 1024:
         return _render(request, "error.html", {"message": "Файл карточек больше 2 МБ."}, 422)
     try:
-        import_notebooklm_cards(data.decode("utf-8"), output / "transcript.json", output / "card_candidates.json")
+        import_notebooklm_cards(
+            data.decode("utf-8"),
+            output / "transcript.json",
+            output / "card_candidates.json",
+            append=append,
+        )
         if not 1 <= frames_per_card <= 20 or image_policy not in {"auto", "always", "never"}:
             raise ValueError("Некорректные параметры подбора кадров.")
         job = request.app.state.jobs.submit(PipelineRunRequest(

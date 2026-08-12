@@ -106,11 +106,32 @@ def _read_lines(text: str) -> list[tuple[str, str, str, str]]:
     return cards
 
 
-def import_notebooklm_cards(text: str, transcript_path: Path, destination: Path) -> CardCandidateCollection:
+def import_notebooklm_cards(
+    text: str,
+    transcript_path: Path,
+    destination: Path,
+    *,
+    append: bool = False,
+) -> CardCandidateCollection:
     source, segments = _load_transcript(transcript_path)
     imported = _read_lines(text)
     candidates: list[CardCandidate] = []
-    for position, (external_id, card_type, front, back) in enumerate(imported, 1):
+    next_position = 1
+    if append and destination.exists():
+        try:
+            existing = json.loads(destination.read_text(encoding="utf-8"))
+            raw_candidates = existing["card_candidates"]
+            candidates = [CardCandidate(**item) for item in raw_candidates]
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise NotebookLMImportError("Не удалось прочитать существующие карточки.") from exc
+        notebook_positions = [
+            int(match.group(1))
+            for card in candidates
+            if (match := re.fullmatch(r"n_(\d+)", card.card_id))
+        ]
+        next_position = max(notebook_positions, default=0) + 1
+    for offset, (external_id, card_type, front, back) in enumerate(imported):
+        position = next_position + offset
         card_id = f"n_{position:04d}"
         candidates.append(CardCandidate(
             card_id=card_id, knowledge_ids=[f"notebooklm_{external_id}"], card_type=card_type,

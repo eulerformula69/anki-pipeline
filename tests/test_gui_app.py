@@ -53,6 +53,31 @@ def test_recent_project_is_openable(tmp_path):
     assert "Create Anki cards from the important Japanese grammar" in page.text
 
 
+def test_recent_project_with_cards_opens_review_even_when_restored_job_is_completed(tmp_path):
+    output = tmp_path / "output" / "lesson"
+    output.mkdir(parents=True)
+    (output / "transcript.json").write_text(
+        '{"source":"lesson.mp4","segments":[]}', encoding="utf-8"
+    )
+    (output / "card_candidates.json").write_text(
+        '{"source":"lesson.mp4","model":"test","card_candidates":[]}', encoding="utf-8"
+    )
+    client = TestClient(create_app(root=tmp_path))
+
+    opened = client.get("/projects/lesson", follow_redirects=False)
+
+    assert opened.status_code == 303
+    assert opened.headers["location"].endswith("/review")
+
+
+def test_review_ui_can_append_notebooklm_cards():
+    template = (Path(__file__).parents[1] / "src" / "gui" / "templates" / "review.html").read_text(encoding="utf-8")
+
+    assert "Добавить карточки из NotebookLM" in template
+    assert 'name="append" value="true"' in template
+    assert "Добавить и подобрать кадры" in template
+
+
 def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
     output = tmp_path / "output" / "lesson"
     output.mkdir(parents=True)
