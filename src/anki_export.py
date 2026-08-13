@@ -184,8 +184,8 @@ def _model(genanki: Any) -> Any:
         fields=[{"name": name} for name in FIELD_NAMES],
         templates=[{
             "name": "Card 1",
-            "qfmt": '<div class="front">{{Front}}</div>{{#Image}}<div class="image">{{Image}}</div>{{/Image}}',
-            "afmt": '{{FrontSide}}<hr id="answer"><div class="back">{{Back}}</div>{{#Extra}}<div class="extra">{{Extra}}</div>{{/Extra}}{{#TargetText}}<div class="target">{{TargetText}}<br><span>{{Reading}}</span></div>{{/TargetText}}',
+            "qfmt": '<div class="front">{{furigana:Front}}</div>{{#Image}}<div class="image">{{Image}}</div>{{/Image}}',
+            "afmt": '{{FrontSide}}<hr id="answer"><div class="back">{{furigana:Back}}</div>{{#Extra}}<div class="extra">{{furigana:Extra}}</div>{{/Extra}}{{#TargetText}}<div class="target">{{furigana:TargetText}}<br><span>{{Reading}}</span></div>{{/TargetText}}',
         }],
         css=""".card { font-family: Arial, 'Yu Gothic', 'Meiryo', sans-serif; font-size: 22px; text-align: left; color: #222; background: #fff; line-height: 1.45; } .front, .back { font-size: 1.15em; } .extra, .target { margin-top: 1em; font-size: .85em; color: #555; } .image { margin-top: 1em; text-align: center; } img { max-width: 100%; max-height: 55vh; }""",
     )

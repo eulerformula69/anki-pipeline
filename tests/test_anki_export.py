@@ -103,6 +103,21 @@ def test_stable_identifiers_are_deterministic_and_card_specific() -> None:
     assert 1 << 30 <= stable_deck_id("lesson.mkv") < 1 << 31
 
 
+def test_exported_model_renders_furigana_in_japanese_text_fields(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+
+    build_anki_deck(
+        cards, expressions, media, tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+    )
+
+    template = FakePackage.last.deck.notes[0].model.kwargs["templates"][0]
+    assert "{{furigana:Front}}" in template["qfmt"]
+    assert "{{furigana:Back}}" in template["afmt"]
+    assert "{{furigana:Extra}}" in template["afmt"]
+    assert "{{furigana:TargetText}}" in template["afmt"]
+    assert "{{Reading}}" in template["afmt"]
+
+
 def test_loaders_filter_unverified_and_reject_unsafe_media(tmp_path) -> None:
     cards, expressions, media = write_inputs(tmp_path)
     source, loaded = load_card_candidates(cards)
