@@ -150,6 +150,25 @@ def test_build_deck_escapes_html_packages_media_and_writes_manifest(tmp_path, fa
     assert result["notes"][0]["start_seconds"] == 12.5
 
 
+def test_export_preserves_line_breaks_in_editable_card_fields(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+    data = json.loads(cards.read_text(encoding="utf-8"))
+    card = data["card_candidates"][0]
+    card["front"] = "First line\nSecond & line"
+    card["back"] = "Answer one\r\nAnswer two"
+    card["extra"] = "Note one\rNote two"
+    cards.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    build_anki_deck(
+        cards, expressions, media, tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+    )
+
+    fields = FakePackage.last.deck.notes[0].fields
+    assert fields[0] == "First line<br>Second &amp; line"
+    assert fields[1] == "Answer one<br>Answer two"
+    assert fields[2] == "Note one<br>Note two"
+
+
 def test_export_adds_global_tags(tmp_path, fake_genanki) -> None:
     cards, expressions, media = write_inputs(tmp_path, with_image=False)
 

@@ -29,6 +29,12 @@ class AnkiExportError(RuntimeError):
     pass
 
 
+def _anki_html_text(value: str) -> str:
+    """Escape user text while preserving its line breaks in Anki's HTML fields."""
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    return html.escape(normalized).replace("\n", "<br>")
+
+
 @dataclass(frozen=True)
 class ExportedNote:
     card_id: str
@@ -317,10 +323,9 @@ def build_anki_deck(
             guid = stable_guid(source, card.card_id)
 
             fields = [
-                html.escape(card.front), html.escape(card.back), html.escape(card.extra),
-                html.escape(target_text).replace("\n", "<br>"),
-                html.escape(reading).replace("\n", "<br>"),
-                html.escape(romanization).replace("\n", "<br>"), image_html,
+                _anki_html_text(card.front), _anki_html_text(card.back),
+                _anki_html_text(card.extra), _anki_html_text(target_text),
+                _anki_html_text(reading), _anki_html_text(romanization), image_html,
                 html.escape(source), "" if start_seconds is None else f"{start_seconds:.3f}",
                 html.escape(" ".join(anki_tags)),
             ]
