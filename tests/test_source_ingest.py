@@ -86,6 +86,28 @@ def test_download_failure_includes_real_reason(tmp_path, monkeypatch) -> None:
         )
 
 
+def test_http_403_retries_with_embedded_client(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("src.source_ingest.importlib.util.find_spec", lambda name: object())
+    video = tmp_path / "Youtube" / "abc" / "video.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"video")
+    calls = []
+
+    def fake_popen(command, **kwargs):
+        calls.append(command)
+        if len(calls) == 1:
+            return FakeProcess(["ERROR: HTTP Error 403: Forbidden\n"], return_code=1)
+        return FakeProcess([f"{FILE_MARKER}{video}\n"])
+
+    result = prepare_youtube_source(
+        "https://youtu.be/abc", input_root=tmp_path, popen=fake_popen,
+    )
+
+    assert result.video_path == str(video.resolve())
+    assert len(calls) == 2
+    assert "youtube:player_client=web_embedded" in calls[1]
+
+
 def test_download_uses_retries_and_available_node(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("src.source_ingest.importlib.util.find_spec", lambda name: object())
     monkeypatch.setattr("src.source_ingest.shutil.which", lambda name: "node.exe")

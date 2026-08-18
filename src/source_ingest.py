@@ -121,8 +121,36 @@ def _download_error(return_code: int, output_tail: list[str]) -> SourceIngestErr
     message = f"Не удалось скачать видео с YouTube (код yt-dlp {return_code})."
     if details:
         message += f" Причина: {details}"
-    message += " Обновите зависимости командой: py -m pip install -U -r requirements.txt"
+    if any("HTTP Error 403" in line for line in output_tail):
+        message += " YouTube отклонил и основной, и резервный способ загрузки."
+    else:
+        message += " Обновите зависимости командой: py -m pip install -U -r requirements.txt"
     return SourceIngestError(message)
+
+
+def _run_ytdlp(
+    command: list[str], popen: Callable[..., subprocess.Popen],
+) -> tuple[int, Path | None, list[str]]:
+    try:
+        process = popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+        )
+    except OSError as exc:
+        raise SourceIngestError(f"Не удалось запустить yt-dlp: {exc}") from exc
+    downloaded_path: Path | None = None
+    output_tail: list[str] = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        clean = line.rstrip()
+        if clean.startswith(FILE_MARKER):
+            downloaded_path = Path(clean[len(FILE_MARKER):].strip())
+        elif clean:
+            print(clean, flush=True)
+        if clean:
+            output_tail.append(clean)
+            output_tail = output_tail[-ERROR_TAIL_LINES:]
+    return process.wait(), downloaded_path, output_tail
 
 
 def prepare_youtube_source(
@@ -171,26 +199,15 @@ def prepare_youtube_source(
             "--sub-langs", ",".join(f"{value}.*" for value in dict.fromkeys(languages)),
         ])
     command.append(normalized_url)
-    try:
-        process = popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace",
+    return_code, downloaded_path, output_tail = _run_ytdlp(command, popen)
+    if return_code != 0 and any("HTTP Error 403" in line for line in output_tail):
+        print("YouTube отклонил основной поток; пробуем совместимый режим...", flush=True)
+        fallback_command = command[:-1] + [
+            "--extractor-args", "youtube:player_client=web_embedded", command[-1],
+        ]
+        return_code, downloaded_path, output_tail = _run_ytdlp(
+            fallback_command, popen,
         )
-    except OSError as exc:
-        raise SourceIngestError(f"Не удалось запустить yt-dlp: {exc}") from exc
-    downloaded_path: Path | None = None
-    output_tail: list[str] = []
-    assert process.stdout is not None
-    for line in process.stdout:
-        clean = line.rstrip()
-        if clean.startswith(FILE_MARKER):
-            downloaded_path = Path(clean[len(FILE_MARKER):].strip())
-        elif clean:
-            print(clean, flush=True)
-        if clean:
-            output_tail.append(clean)
-            output_tail = output_tail[-ERROR_TAIL_LINES:]
-    return_code = process.wait()
     if return_code != 0:
         raise _download_error(return_code, output_tail)
     if downloaded_path is None or not downloaded_path.is_file():
