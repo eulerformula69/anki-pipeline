@@ -1,6 +1,8 @@
 import json
+import sqlite3
 import sys
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -84,7 +86,20 @@ class FakePackage:
         FakePackage.last = self
 
     def write_to_file(self, path):
-        Path(path).write_bytes(b"fake-apkg")
+        database = Path(path).with_suffix(".anki2")
+        connection = sqlite3.connect(database)
+        try:
+            connection.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY)")
+            connection.executemany(
+                "INSERT INTO cards DEFAULT VALUES",
+                (() for _ in self.deck.notes),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        with zipfile.ZipFile(path, "w") as package:
+            package.write(database, "collection.anki2")
+        database.unlink()
 
 
 @pytest.fixture
@@ -137,7 +152,7 @@ def test_build_deck_escapes_html_packages_media_and_writes_manifest(tmp_path, fa
     exported = build_anki_deck(cards, expressions, media, destination, manifest)
     package = FakePackage.last
     note = package.deck.notes[0]
-    assert destination.read_bytes() == b"fake-apkg"
+    assert destination.is_file()
     assert len(note.fields) == len(FIELD_NAMES)
     assert note.fields[0] == "What is A &amp; B?"
     assert note.fields[1] == "A &lt; B"
@@ -167,6 +182,24 @@ def test_export_preserves_line_breaks_in_editable_card_fields(tmp_path, fake_gen
     assert fields[0] == "First line<br>Second &amp; line"
     assert fields[1] == "Answer one<br>Answer two"
     assert fields[2] == "Note one<br>Note two"
+
+
+def test_real_package_contains_a_card_when_front_uses_furigana(tmp_path) -> None:
+    pytest.importorskip("genanki")
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+    destination = tmp_path / "lesson.apkg"
+
+    build_anki_deck(cards, expressions, media, destination, tmp_path / "manifest.json")
+
+    with zipfile.ZipFile(destination) as package:
+        database_path = tmp_path / "collection.anki2"
+        database_path.write_bytes(package.read("collection.anki2"))
+    connection = sqlite3.connect(database_path)
+    try:
+        assert connection.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM cards").fetchone()[0] == 1
+    finally:
+        connection.close()
 
 
 def test_export_adds_global_tags(tmp_path, fake_genanki) -> None:

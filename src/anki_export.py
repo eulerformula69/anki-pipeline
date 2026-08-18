@@ -5,7 +5,9 @@ import html
 import json
 import os
 import re
+import sqlite3
 import tempfile
+import zipfile
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -185,7 +187,15 @@ def stable_deck_id(source: str) -> int:
 
 
 def _model(genanki: Any) -> Any:
-    return genanki.Model(
+    class PipelineModel(genanki.Model):
+        @property
+        def _req(self) -> list[list[Any]]:
+            # genanki's Mustache renderer does not understand Anki's
+            # {{furigana:Field}} filter and can otherwise decide that only the
+            # optional Image field creates a card.
+            return [[0, "all", [0]]]
+
+    return PipelineModel(
         MODEL_ID, MODEL_NAME,
         fields=[{"name": name} for name in FIELD_NAMES],
         templates=[{
@@ -212,6 +222,27 @@ def stage_media_image(source: Path, destination: Path) -> None:
             compress_card_image(image, destination)
     except (OSError, UnidentifiedImageError) as exc:
         raise AnkiExportError(f"Не удалось подготовить изображение {source}: {exc}") from exc
+
+
+def packaged_card_count(path: Path) -> int:
+    try:
+        with zipfile.ZipFile(path) as package:
+            database_name = next(
+                (name for name in ("collection.anki21b", "collection.anki2") if name in package.namelist()),
+                None,
+            )
+            if database_name is None:
+                raise AnkiExportError("В .apkg отсутствует база коллекции Anki.")
+            with tempfile.TemporaryDirectory(prefix="anki-validate-", dir=path.parent) as temporary:
+                database_path = Path(temporary) / database_name
+                database_path.write_bytes(package.read(database_name))
+                database = sqlite3.connect(database_path)
+                try:
+                    return int(database.execute("SELECT COUNT(*) FROM cards").fetchone()[0])
+                finally:
+                    database.close()
+    except (OSError, sqlite3.Error, zipfile.BadZipFile) as exc:
+        raise AnkiExportError(f"Не удалось проверить собранную .apkg: {exc}") from exc
 
 
 def build_anki_deck(
@@ -343,6 +374,11 @@ def build_anki_deck(
             raise AnkiExportError(f"Не удалось собрать .apkg: {exc}") from exc
         if not temporary_package.is_file() or temporary_package.stat().st_size == 0:
             raise AnkiExportError("genanki не создал корректный файл колоды.")
+        actual_cards = packaged_card_count(temporary_package)
+        if actual_cards != len(exported):
+            raise AnkiExportError(
+                f"Собранная .apkg содержит {actual_cards} карточек вместо {len(exported)}."
+            )
         os.replace(temporary_package, destination)
     save_json_atomic({
         "source": source, "generator": "genanki-local-v1",
