@@ -45,6 +45,9 @@ def test_youtube_download_writes_manifest_and_reuses_file(tmp_path, monkeypatch)
     video = tmp_path / "YouTube" / "abc" / "video.mkv"
     video.parent.mkdir(parents=True)
     video.write_bytes(b"video")
+    video.with_suffix(".info.json").write_text(
+        '{"id":"abc","title":"Stable download"}', encoding="utf-8",
+    )
     calls = []
 
     def fake_popen(command, **kwargs):
@@ -61,6 +64,7 @@ def test_youtube_download_writes_manifest_and_reuses_file(tmp_path, monkeypatch)
     )
 
     assert first.reused is False and second.reused is True
+    assert first.source_id == "abc" and first.title == "Stable download"
     assert (video.parent / "source_manifest.json").exists()
     assert (tmp_path / "source_index.json").exists()
     command = calls[0]
@@ -69,14 +73,39 @@ def test_youtube_download_writes_manifest_and_reuses_file(tmp_path, monkeypatch)
     assert "en.*,ja.*" in command
 
 
-def test_download_failure_is_readable(tmp_path, monkeypatch) -> None:
+def test_download_failure_includes_real_reason(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("src.source_ingest.importlib.util.find_spec", lambda name: object())
 
-    with pytest.raises(SourceIngestError, match="кодом 1"):
+    with pytest.raises(SourceIngestError, match="HTTP Error 422"):
         prepare_youtube_source(
             "https://youtu.be/abc", input_root=tmp_path,
-            popen=lambda *a, **k: FakeProcess(["failed\n"], return_code=1),
+            popen=lambda *a, **k: FakeProcess(
+                ["noise\n", "ERROR: HTTP Error 422: Unprocessable Entity\n"],
+                return_code=1,
+            ),
         )
+
+
+def test_download_uses_retries_and_available_node(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("src.source_ingest.importlib.util.find_spec", lambda name: object())
+    monkeypatch.setattr("src.source_ingest.shutil.which", lambda name: "node.exe")
+    video = tmp_path / "YouTube" / "abc" / "video.mkv"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"video")
+    calls = []
+
+    def fake_popen(command, **kwargs):
+        calls.append(command)
+        return FakeProcess([f"{FILE_MARKER}{video}\n"])
+
+    prepare_youtube_source(
+        "https://youtu.be/abc", input_root=tmp_path, popen=fake_popen,
+    )
+
+    command = calls[0]
+    assert "--ignore-config" in command
+    assert "--extractor-retries" in command
+    assert command[command.index("--js-runtimes") + 1] == "node"
 
 
 def test_downloaded_path_cannot_escape_root(tmp_path, monkeypatch) -> None:

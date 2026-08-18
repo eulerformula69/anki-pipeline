@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from src.gui.app import create_app
 from src.gui.schemas import JobState
-from src.source_ingest import PreparedSource
+from src.source_ingest import PreparedSource, SourceIngestError
 
 
 class CapturingManager:
@@ -34,6 +34,24 @@ def test_unknown_video_extension_is_rejected(tmp_path):
         files={"video_file": ("../bad.exe", b"x", "application/octet-stream")},
     )
     assert response.status_code == 422
+
+
+def test_youtube_download_failure_is_reported_as_upstream_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "src.gui.routes.prepare_source",
+        lambda value: (_ for _ in ()).throw(SourceIngestError("YouTube недоступен")),
+    )
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+
+    response = client.post("/jobs", data={
+        "csrf": token,
+        "youtube_url": "https://youtu.be/abc",
+        "stages": "transcription",
+    })
+
+    assert response.status_code == 502
+    assert "YouTube недоступен" in response.text
 
 
 def test_youtube_prepared_string_path_is_converted_at_gui_boundary(tmp_path, monkeypatch):

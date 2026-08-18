@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -19,6 +20,7 @@ YOUTUBE_HOSTS = {
     "music.youtube.com", "youtu.be",
 }
 FILE_MARKER = "__ANKI_PIPELINE_FILE__"
+ERROR_TAIL_LINES = 8
 
 
 class SourceIngestError(RuntimeError):
@@ -100,6 +102,29 @@ def _read_metadata(video_path: Path) -> tuple[str, str]:
         return video_path.parent.name, video_path.stem
 
 
+def _javascript_runtime_args() -> list[str]:
+    """Prefer the supported Node runtime when it is available.
+
+    Deno is enabled by yt-dlp by default, but a broken Deno shim can prevent
+    yt-dlp from falling through to an otherwise healthy Node installation.
+    """
+    if shutil.which("node"):
+        return ["--no-js-runtimes", "--js-runtimes", "node"]
+    return []
+
+
+def _download_error(return_code: int, output_tail: list[str]) -> SourceIngestError:
+    details = next(
+        (line for line in reversed(output_tail) if "ERROR:" in line),
+        output_tail[-1] if output_tail else "",
+    )
+    message = f"Не удалось скачать видео с YouTube (код yt-dlp {return_code})."
+    if details:
+        message += f" Причина: {details}"
+    message += " Обновите зависимости командой: py -m pip install -U -r requirements.txt"
+    return SourceIngestError(message)
+
+
 def prepare_youtube_source(
     url: str, *, input_root: Path = Path("input/downloads"),
     subtitle_languages: tuple[str, ...] = (), force: bool = False,
@@ -128,13 +153,17 @@ def prepare_youtube_source(
         (input_root.resolve() / "%(extractor_key)s" / "%(id)s" / "video.%(ext)s")
     )
     command = [
-        sys.executable, "-m", "yt_dlp", "--no-playlist", "--newline", "--progress",
+        sys.executable, "-m", "yt_dlp", "--ignore-config",
+        "--no-playlist", "--newline", "--progress",
         "--no-remote-components", "--windows-filenames", "--trim-filenames", "120",
+        "--retries", "5", "--fragment-retries", "10", "--extractor-retries", "3",
+        "--retry-sleep", "exp=1:20", "--socket-timeout", "30",
         "--format", "bv*+ba/b", "--merge-output-format", "mkv",
         "--write-info-json", "--no-write-playlist-metafiles",
         "--print", f"after_move:{FILE_MARKER}%(filepath)s",
         "--output", output_template,
     ]
+    command.extend(_javascript_runtime_args())
     languages = [value.strip() for value in subtitle_languages if value.strip()]
     if languages:
         command.extend([
@@ -150,6 +179,7 @@ def prepare_youtube_source(
     except OSError as exc:
         raise SourceIngestError(f"Не удалось запустить yt-dlp: {exc}") from exc
     downloaded_path: Path | None = None
+    output_tail: list[str] = []
     assert process.stdout is not None
     for line in process.stdout:
         clean = line.rstrip()
@@ -157,9 +187,12 @@ def prepare_youtube_source(
             downloaded_path = Path(clean[len(FILE_MARKER):].strip())
         elif clean:
             print(clean, flush=True)
+        if clean:
+            output_tail.append(clean)
+            output_tail = output_tail[-ERROR_TAIL_LINES:]
     return_code = process.wait()
     if return_code != 0:
-        raise SourceIngestError(f"yt-dlp завершился с кодом {return_code}.")
+        raise _download_error(return_code, output_tail)
     if downloaded_path is None or not downloaded_path.is_file():
         raise SourceIngestError("yt-dlp не сообщил путь к загруженному видео.")
     if not _is_within(downloaded_path, input_root):

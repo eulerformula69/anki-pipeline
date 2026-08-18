@@ -216,7 +216,9 @@ async def create_job(
             knowledge_language=knowledge_language,
             target_language=target_language, frames_per_card=frames_per_card, image_policy=image_policy,
         ))
-    except (ValueError, SourceIngestError) as exc:
+    except SourceIngestError as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 502)
+    except ValueError as exc:
         return _render(request, "error.html", {"message": str(exc)}, 422)
     return RedirectResponse(f"/jobs/{job.job_id}", 303)
 
