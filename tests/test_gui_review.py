@@ -119,6 +119,20 @@ def test_blank_card_is_added_and_cards_can_be_reordered(tmp_path):
     assert [card["card_id"] for card in reordered["cards"]] == ["manual_0001", "c_1"]
 
 
+def test_adding_blank_card_revokes_previous_approval(tmp_path):
+    output = project(tmp_path)
+    store = ReviewStore()
+    store.load_or_create(output)
+    store.approve(output)
+
+    card_id = store.add_blank_card(output)
+    review = store.load_or_create(output)
+
+    assert card_id == "manual_0001"
+    assert review["status"] == "draft"
+    assert review["approved_at"] is None
+
+
 def test_image_action_returns_only_media_fragment_without_page_reload(tmp_path):
     output = tmp_path / "output" / "video"
     output.mkdir(parents=True, exist_ok=True)

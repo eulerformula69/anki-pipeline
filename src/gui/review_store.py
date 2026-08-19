@@ -59,10 +59,12 @@ class ReviewStore:
                     card.get("card_id"): card
                     for card in review.get("cards", [])
                 }
+                added_cards = False
                 for raw in raw_cards:
                     existing = reviewed_by_id.get(raw["card_id"])
                     if existing is None:
                         review["cards"].append(self._draft_card(raw, output))
+                        added_cards = True
                         continue
                     if existing.get("changed") or existing.get("reviewed"):
                         continue
@@ -84,7 +86,7 @@ class ReviewStore:
                             repaired_stale = True
                         card["included"] = False
                         card["image"] = {"mode": "none"}
-                if repaired_stale:
+                if added_cards or repaired_stale:
                     review.update(status="draft", approved_at=None, updated_at=now_iso())
                 self.validate(review, output, approving=False)
                 atomic_json(review, approved)
