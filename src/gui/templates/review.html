@@ -10,14 +10,14 @@
   </form>
 </div>
 <details class="panel add-cards-panel">
-  <summary>Добавить карточки из NotebookLM</summary>
+  <summary>Добавить карточки из LLM-источника</summary>
   <p>Вставьте одну карточку или сразу весь новый пак. Существующие карточки и ваши правки сохранятся.</p>
   <form class="import-form" method="post" action="/jobs/{{ job.job_id }}/notebooklm-cards" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="append" value="true">
-    <label>Ответ NotebookLM<small>Строки в формате ID | Тип | Вопрос | Ответ.</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
+    <label>Ответ LLM-источника<small>Строки в формате ID | Тип | Вопрос | Ответ.</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
     <div class="or" aria-hidden="true">или</div>
-    <label>Файл карточек из NotebookLM (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
+    <label>Файл карточек из LLM-источника (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
     <input type="hidden" name="frames_per_card" value="5">
     <input type="hidden" name="image_policy" value="auto">
     <button class="primary" type="submit">Добавить и подобрать кадры</button>

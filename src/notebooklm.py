@@ -21,6 +21,7 @@ _STOPWORDS = {
 }
 
 LEARNING_GOALS = {"recall", "application", "discrimination", "cloze"}
+LLM_SOURCE_TAG = "LLM-source"
 
 NOTEBOOKLM_PROMPT_PATH = Path(__file__).resolve().parent.parent / "notebooklm-prompt.md"
 
@@ -136,7 +137,7 @@ def import_notebooklm_cards(
         candidates.append(CardCandidate(
             card_id=card_id, knowledge_ids=[f"notebooklm_{external_id}"], card_type=card_type,
             front=front, back=back, extra="", difficulty=3, importance=3,
-            tags=["notebooklm", card_type], source_transcript_segment_ids=_source_ids(front, back, segments),
+            tags=[LLM_SOURCE_TAG, card_type], source_transcript_segment_ids=_source_ids(front, back, segments),
             expression_ids=[],
         ))
     result = CardCandidateCollection(source, "notebooklm-import-v1", candidates)

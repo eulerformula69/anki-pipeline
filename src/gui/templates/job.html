@@ -6,7 +6,7 @@
   <div class="status" aria-live="polite"><span id="status">{{ job.status }}</span><span id="message">{{ job.progress_message }}</span></div>
   <ol class="journey" id="stages">
     <li data-stage="transcription"><b>1</b><span>Транскрипция</span></li>
-    <li data-stage="notebooklm"><b>2</b><span>Карточки в NotebookLM</span></li>
+    <li data-stage="notebooklm"><b>2</b><span>Карточки в LLM-источнике</span></li>
     <li data-stage="frame_extraction"><b>3</b><span>Кадры и проверка</span></li>
   </ol>
   <p id="error" class="error">{{ job.error or '' }}</p>
@@ -14,21 +14,21 @@
 
   <section id="notebooklm-flow" class="notebooklm-flow {% if job.status != 'completed' %}hidden{% endif %}">
     <p class="step-number">Шаг 2 из 3</p>
-    <h2>Создайте карточки в NotebookLM</h2>
-    <p>Скачайте транскрипцию, загрузите её в NotebookLM, скопируйте промпт ниже, затем вставьте сюда ответ или загрузите полученный файл.</p>
+    <h2>Создайте карточки в LLM-источнике</h2>
+    <p>Скачайте транскрипцию, загрузите её в LLM-источник, скопируйте промпт ниже, затем вставьте сюда ответ или загрузите полученный файл.</p>
     <div class="download-actions">
       <a class="secondary" href="/jobs/{{ job.job_id }}/transcript">1. Скачать транскрипцию</a>
     </div>
     <div class="prompt-copy">
-      <label for="notebooklm-prompt">2. Промпт для NotebookLM</label>
+      <label for="notebooklm-prompt">2. Промпт для LLM-источника</label>
       <textarea id="notebooklm-prompt" readonly>{{ notebooklm_prompt }}</textarea>
       <div class="copy-row"><button id="copy-prompt" type="button">Скопировать промпт</button><span id="copy-status" class="saved" role="status" aria-live="polite"></span></div>
     </div>
     <form class="import-form" method="post" action="/jobs/{{ job.job_id }}/notebooklm-cards" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <label>Ответ NotebookLM<small>Вставьте строки в формате ID | Тип | Вопрос | Ответ.</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
+      <label>Ответ LLM-источника<small>Вставьте строки в формате ID | Тип | Вопрос | Ответ.</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
       <div class="or" aria-hidden="true">или</div>
-      <label>Файл карточек из NotebookLM (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
+      <label>Файл карточек из LLM-источника (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
       <input type="hidden" name="frames_per_card" value="5">
       <input type="hidden" name="image_policy" value="auto">
       <button class="primary" type="submit">Подобрать кадры для карточек</button>

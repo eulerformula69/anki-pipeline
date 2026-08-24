@@ -13,7 +13,8 @@ def test_index_starts_with_transcription_and_hides_legacy_stages(tmp_path):
     assert "Видеофайл" in response.text
     assert 'type="hidden" name="stages" value="transcription"' in response.text
     assert "Создать транскрипцию" in response.text
-    assert "NotebookLM" in response.text
+    assert "LLM-источник" in response.text
+    assert "NotebookLM" not in response.text
     assert "LLM provider" not in response.text
     assert "Кандидаты карточек" not in response.text
     assert "build_anki" not in response.text
@@ -73,7 +74,7 @@ def test_recent_project_with_cards_opens_review_even_when_restored_job_is_comple
 def test_review_ui_can_append_notebooklm_cards():
     template = (Path(__file__).parents[1] / "src" / "gui" / "templates" / "review.html").read_text(encoding="utf-8")
 
-    assert "Добавить карточки из NotebookLM" in template
+    assert "Добавить карточки из LLM-источника" in template
     assert 'name="append" value="true"' in template
     assert "Добавить и подобрать кадры" in template
     assert "+ Карточка" in template

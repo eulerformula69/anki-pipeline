@@ -308,12 +308,12 @@ async def import_cards_from_notebooklm(
     if has_file and pasted_text:
         return _render(request, "error.html", {"message": "Вставьте текст или загрузите файл — не оба сразу."}, 422)
     if not has_file and not pasted_text:
-        return _render(request, "error.html", {"message": "Вставьте ответ NotebookLM или загрузите .txt файл."}, 422)
+        return _render(request, "error.html", {"message": "Вставьте ответ LLM-источника или загрузите .txt файл."}, 422)
     if has_file:
         assert cards_file is not None
         if Path(cards_file.filename or "").suffix.lower() != ".txt":
             await cards_file.close()
-            return _render(request, "error.html", {"message": "Загрузите .txt файл из NotebookLM."}, 422)
+            return _render(request, "error.html", {"message": "Загрузите .txt файл из LLM-источника."}, 422)
         data = await cards_file.read(2 * 1024 * 1024 + 1)
         await cards_file.close()
     else:

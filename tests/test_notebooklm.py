@@ -27,7 +27,7 @@ def test_import_preserves_notebooklm_text_and_links_the_best_transcript_segment(
     assert card.front == "Complete: Yesterday I ___ home."
     assert card.back == "went"
     assert card.card_type == "application"
-    assert card.tags == ["notebooklm", "application"]
+    assert card.tags == ["LLM-source", "application"]
     assert card.source_transcript_segment_ids == [2]
     assert json.loads(destination.read_text(encoding="utf-8"))["model"] == "notebooklm-import-v1"
 
