@@ -158,3 +158,55 @@ def test_image_action_returns_only_media_fragment_without_page_reload(tmp_path):
     assert response.status_code == 200
     assert 'id="media-c_1"' in response.text
     assert "<html" not in response.text
+
+
+def test_remove_all_images_updates_every_card_in_one_action(tmp_path):
+    output = tmp_path / "output" / "video"
+    output.mkdir(parents=True, exist_ok=True)
+    project(output)
+    media_dir = output / "media"
+    media_dir.mkdir()
+    image = media_dir / "c_1.jpg"
+    image.write_bytes(b"image")
+    (output / "card_media.json").write_text(json.dumps({
+        "cards": [{"card_id": "c_1", "image": {"path": "media/c_1.jpg", "timestamp": 1.0}}]
+    }), encoding="utf-8")
+    state = JobState(
+        job_id="job1", source="Lesson", video_path=str(tmp_path / "video.mkv"),
+        output_directory=str(output), status="awaiting_review", created_at="now",
+    )
+    manager = JobManager(output_root=tmp_path / "output")
+    manager.jobs[state.job_id] = state
+    client = TestClient(create_app(root=tmp_path, manager=manager))
+    token = client.get("/").cookies["anki_csrf"]
+
+    response = client.post(
+        "/jobs/job1/review/images-remove",
+        data={"csrf": token},
+        follow_redirects=False,
+    )
+
+    saved = json.loads((output / "approved_cards.json").read_text(encoding="utf-8"))
+    assert response.status_code == 303
+    assert response.headers["location"] == "/jobs/job1/review"
+    assert saved["cards"][0]["image"] == {"mode": "none"}
+    assert saved["cards"][0]["reviewed"] is True
+    assert image.exists()
+
+
+def test_review_page_has_bulk_remove_images_button(tmp_path):
+    output = tmp_path / "output" / "video"
+    output.mkdir(parents=True, exist_ok=True)
+    project(output)
+    state = JobState(
+        job_id="job1", source="Lesson", video_path=str(tmp_path / "video.mkv"),
+        output_directory=str(output), status="awaiting_review", created_at="now",
+    )
+    manager = JobManager(output_root=tmp_path / "output")
+    manager.jobs[state.job_id] = state
+
+    response = TestClient(create_app(root=tmp_path, manager=manager)).get("/jobs/job1/review")
+
+    assert response.status_code == 200
+    assert 'action="/jobs/job1/review/images-remove"' in response.text
+    assert "Убрать все изображения" in response.text

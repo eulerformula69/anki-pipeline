@@ -437,6 +437,15 @@ def remove_image(request: Request, job_id: str, card_id: str, csrf: Annotated[st
     return _media_fragment(request, state, output, card_id)
 
 
+@router.post("/jobs/{job_id}/review/images-remove")
+def remove_all_images(request: Request, job_id: str, csrf: Annotated[str, Form()]):
+    _check_csrf(request, csrf)
+    state = _job(request, job_id)
+    output = _safe_output(state, request.app.state.root)
+    request.app.state.reviews.remove_all_images(output)
+    return RedirectResponse(f"/jobs/{job_id}/review", 303)
+
+
 @router.post("/jobs/{job_id}/review/cards/{card_id}/image-candidates")
 def image_candidates(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()]):
     _check_csrf(request, csrf)

@@ -129,6 +129,26 @@ class ReviewStore:
             atomic_json(review, path)
             return card
 
+    def remove_all_images(self, output: Path) -> int:
+        path = output / "approved_cards.json"
+        with self._lock(path):
+            review = self.load_or_create(output)
+            changed_at = now_iso()
+            changed = 0
+            for card in review["cards"]:
+                if (card.get("image") or {}).get("mode") == "none":
+                    continue
+                card["image"] = {"mode": "none"}
+                card["changed"] = True
+                card["reviewed"] = True
+                card["updated_at"] = changed_at
+                changed += 1
+            if changed:
+                review.update(status="draft", approved_at=None, updated_at=changed_at)
+                self.validate(review, output, approving=False)
+                atomic_json(review, path)
+            return changed
+
     def add_blank_card(self, output: Path) -> str:
         candidates_path = output / "card_candidates.json"
         with self._lock(candidates_path):

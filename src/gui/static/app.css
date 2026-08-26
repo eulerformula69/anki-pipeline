@@ -72,6 +72,8 @@ button:active, .primary:active, .secondary:active { transform: scale(.97); }
 .error { color: var(--red); }
 .saved { color: var(--green); }
 .review-toolbar { margin-bottom: 1rem; }
+.review-toolbar-actions { display: flex; gap: .65rem; flex-wrap: wrap; }
+.review-toolbar-actions button:disabled { cursor: default; opacity: .45; }
 .add-cards-panel { max-width: 48rem; margin: 0 auto 1rem; }
 .add-cards-panel summary { cursor: pointer; font-weight: 750; }
 .add-cards-panel[open] summary { margin-bottom: 1rem; }
