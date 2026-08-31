@@ -25,6 +25,38 @@ FIELD_NAMES = (
     "Image", "Source", "StartSeconds", "Tags",
 )
 SAFE_CARD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$")
+FURIGANA_TAP_SCRIPT = """
+<!-- furigana-tap-toggle -->
+<script>
+(() => {
+  if (window.furiganaTapHandler) {
+    document.removeEventListener("click", window.furiganaTapHandler);
+  }
+
+  window.furiganaTapHandler = (event) => {
+    const isTouchClient = document.body.classList.contains("mobile")
+      || document.body.classList.contains("android")
+      || document.body.classList.contains("iphone")
+      || document.body.classList.contains("ipad")
+      || navigator.maxTouchPoints > 0;
+
+    if (!isTouchClient) return;
+
+    const tappedRuby = event.target.closest("ruby");
+    const wasVisible = tappedRuby?.classList.contains("furigana-visible");
+
+    document.querySelectorAll("ruby.furigana-visible").forEach((ruby) => {
+      ruby.classList.remove("furigana-visible");
+    });
+
+    if (tappedRuby && !wasVisible) {
+      tappedRuby.classList.add("furigana-visible");
+    }
+  };
+
+  document.addEventListener("click", window.furiganaTapHandler);
+})();
+</script>"""
 
 
 class AnkiExportError(RuntimeError):
@@ -200,21 +232,33 @@ def _model(genanki: Any) -> Any:
         fields=[{"name": name} for name in FIELD_NAMES],
         templates=[{
             "name": "Card 1",
-            "qfmt": '<div class="front">{{furigana:Front}}</div>{{#Image}}<div class="image">{{Image}}</div>{{/Image}}',
-            "afmt": '{{FrontSide}}<hr id="answer"><div class="back">{{furigana:Back}}</div>{{#Extra}}<div class="extra">{{furigana:Extra}}</div>{{/Extra}}{{#TargetText}}<div class="target">{{furigana:TargetText}}<br><span>{{Reading}}</span></div>{{/TargetText}}',
+            "qfmt": '<div class="front">{{furigana:Front}}</div>{{#Image}}<div class="image">{{Image}}</div>{{/Image}}' + FURIGANA_TAP_SCRIPT,
+            "afmt": '{{FrontSide}}<hr id="answer"><div class="back">{{furigana:Back}}</div>{{#Extra}}<div class="extra">{{furigana:Extra}}</div>{{/Extra}}{{#TargetText}}<div class="target">{{furigana:TargetText}}<br><span>{{Reading}}</span></div>{{/TargetText}}' + FURIGANA_TAP_SCRIPT,
         }],
         css=""".card { font-family: Arial, 'Yu Gothic', 'Meiryo', sans-serif; font-size: 22px; text-align: left; color: #222; background: #fff; line-height: 1.45; } .front, .back { font-size: 1.15em; } .extra, .target { margin-top: 1em; font-size: .85em; color: #555; } .image { margin-top: 1em; text-align: center; } img { max-width: 100%; max-height: 55vh; }
 
 /* furigana-on-hover */
-@media (hover: hover) and (pointer: fine) {
-  ruby rt {
-    opacity: 0;
-    transition: opacity 120ms ease;
-  }
+ruby rt {
+  visibility: hidden;
+}
 
-  ruby:hover rt {
-    opacity: 1;
-  }
+ruby:hover rt {
+  visibility: visible;
+}
+
+/* On touch clients, a tap toggles one reading at a time. */
+.mobile ruby:hover rt,
+.android ruby:hover rt,
+.iphone ruby:hover rt,
+.ipad ruby:hover rt {
+  visibility: hidden;
+}
+
+.mobile ruby.furigana-visible rt,
+.android ruby.furigana-visible rt,
+.iphone ruby.furigana-visible rt,
+.ipad ruby.furigana-visible rt {
+  visibility: visible;
 }""",
     )
 

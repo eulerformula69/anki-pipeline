@@ -133,7 +133,7 @@ def test_exported_model_renders_furigana_in_japanese_text_fields(tmp_path, fake_
     assert "{{Reading}}" in template["afmt"]
 
 
-def test_exported_model_hides_furigana_until_hover_on_pointer_devices(tmp_path, fake_genanki) -> None:
+def test_exported_model_hides_furigana_until_hover_without_animation(tmp_path, fake_genanki) -> None:
     cards, expressions, media = write_inputs(tmp_path, with_image=False)
 
     build_anki_deck(
@@ -141,11 +141,33 @@ def test_exported_model_hides_furigana_until_hover_on_pointer_devices(tmp_path, 
     )
 
     css = FakePackage.last.deck.notes[0].model.kwargs["css"]
-    assert "@media (hover: hover) and (pointer: fine)" in css
+    assert "@media (hover: hover)" not in css
     assert "ruby rt" in css
-    assert "opacity: 0" in css
+    assert "visibility: hidden" in css
     assert "ruby:hover rt" in css
-    assert "opacity: 1" in css
+    assert "visibility: visible" in css
+    assert "transition:" not in css
+
+
+def test_exported_model_toggles_one_furigana_reading_on_touch_clients(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+
+    build_anki_deck(
+        cards, expressions, media, tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+    )
+
+    model = FakePackage.last.deck.notes[0].model.kwargs
+    template = model["templates"][0]
+    for side in (template["qfmt"], template["afmt"]):
+        assert "<!-- furigana-tap-toggle -->" in side
+        assert 'document.addEventListener("click", window.furiganaTapHandler)' in side
+        assert 'document.querySelectorAll("ruby.furigana-visible")' in side
+        assert 'tappedRuby.classList.add("furigana-visible")' in side
+        assert "mousemove" not in side
+
+    css = model["css"]
+    assert ".mobile ruby:hover rt" in css
+    assert ".mobile ruby.furigana-visible rt" in css
 
 
 def test_loaders_filter_unverified_and_reject_unsafe_media(tmp_path) -> None:
