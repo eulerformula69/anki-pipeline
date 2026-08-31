@@ -133,6 +133,21 @@ def test_exported_model_renders_furigana_in_japanese_text_fields(tmp_path, fake_
     assert "{{Reading}}" in template["afmt"]
 
 
+def test_exported_model_hides_furigana_until_hover_on_pointer_devices(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+
+    build_anki_deck(
+        cards, expressions, media, tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+    )
+
+    css = FakePackage.last.deck.notes[0].model.kwargs["css"]
+    assert "@media (hover: hover) and (pointer: fine)" in css
+    assert "ruby rt" in css
+    assert "opacity: 0" in css
+    assert "ruby:hover rt" in css
+    assert "opacity: 1" in css
+
+
 def test_loaders_filter_unverified_and_reject_unsafe_media(tmp_path) -> None:
     cards, expressions, media = write_inputs(tmp_path)
     source, loaded = load_card_candidates(cards)
