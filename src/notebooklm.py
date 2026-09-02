@@ -109,12 +109,19 @@ def _read_lines(text: str) -> list[tuple[str, str, str, str]]:
 
 def import_notebooklm_cards(
     text: str,
-    transcript_path: Path,
+    transcript_path: Path | None,
     destination: Path,
     *,
     append: bool = False,
+    source: str | None = None,
 ) -> CardCandidateCollection:
-    source, segments = _load_transcript(transcript_path)
+    if transcript_path is None:
+        if not source or not source.strip():
+            raise NotebookLMImportError("Для карточек без видео укажите название проекта.")
+        source_name = source.strip()
+        segments: list[TranscriptSegment] = []
+    else:
+        source_name, segments = _load_transcript(transcript_path)
     imported = _read_lines(text)
     candidates: list[CardCandidate] = []
     next_position = 1
@@ -137,9 +144,10 @@ def import_notebooklm_cards(
         candidates.append(CardCandidate(
             card_id=card_id, knowledge_ids=[f"notebooklm_{external_id}"], card_type=card_type,
             front=front, back=back, extra="", difficulty=3, importance=3,
-            tags=[LLM_SOURCE_TAG, card_type], source_transcript_segment_ids=_source_ids(front, back, segments),
+            tags=[LLM_SOURCE_TAG, card_type],
+            source_transcript_segment_ids=_source_ids(front, back, segments) if segments else [],
             expression_ids=[],
         ))
-    result = CardCandidateCollection(source, "notebooklm-import-v1", candidates)
+    result = CardCandidateCollection(source_name, "notebooklm-import-v1", candidates)
     save_json_atomic(result.to_dict(), destination)
     return result

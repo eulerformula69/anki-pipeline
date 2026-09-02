@@ -32,6 +32,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi"}
 MAX_UPLOAD = 8 * 1024 * 1024 * 1024
+MAX_CARDS_UPLOAD = 2 * 1024 * 1024
 
 
 def _csrf(request: Request) -> str:
@@ -175,6 +176,52 @@ async def _save_upload(upload: UploadFile, root: Path) -> Path:
     return destination
 
 
+async def _cards_input(cards_file: UploadFile | None, cards_text: str) -> bytes:
+    pasted_text = cards_text.strip()
+    has_file = bool(cards_file and cards_file.filename)
+    if has_file and pasted_text:
+        raise ValueError("Вставьте текст или загрузите файл — не оба сразу.")
+    if not has_file and not pasted_text:
+        raise ValueError("Вставьте ответ LLM-источника или загрузите .txt файл.")
+    if not has_file:
+        return pasted_text.encode("utf-8")
+    assert cards_file is not None
+    if Path(cards_file.filename or "").suffix.lower() != ".txt":
+        await cards_file.close()
+        raise ValueError("Загрузите .txt файл из LLM-источника.")
+    data = await cards_file.read(MAX_CARDS_UPLOAD + 1)
+    await cards_file.close()
+    if len(data) > MAX_CARDS_UPLOAD:
+        raise ValueError("Файл карточек больше 2 МБ.")
+    return data
+
+
+@router.post("/card-projects")
+async def create_card_project(
+    request: Request, csrf: Annotated[str, Form()],
+    project_name: Annotated[str, Form()],
+    cards_file: Annotated[UploadFile | None, File()] = None,
+    cards_text: Annotated[str, Form()] = "",
+):
+    _check_csrf(request, csrf)
+    name = " ".join(project_name.split())
+    if not name or len(name) > 120:
+        return _render(request, "error.html", {"message": "Название проекта должно содержать от 1 до 120 символов."}, 422)
+    try:
+        data = await _cards_input(cards_file, cards_text)
+        slug = re.sub(r"[^A-Za-z0-9А-Яа-яЁё_-]+", "-", name).strip("-")[:60] or "cards"
+        key = f"{slug}-{uuid.uuid4().hex[:8]}"
+        virtual_source = request.app.state.root / "input" / "cards" / f"{key}.cards"
+        output = request.app.state.root / "output" / key
+        import_notebooklm_cards(data.decode("utf-8"), None, output / "card_candidates.json", source=name)
+        state = request.app.state.jobs.register_existing(
+            virtual_source, output, source=name, has_video=False,
+        )
+    except (UnicodeDecodeError, NotebookLMImportError, ValueError) as exc:
+        return _render(request, "error.html", {"message": str(exc)}, 422)
+    return RedirectResponse(f"/jobs/{state.job_id}/review", 303)
+
+
 @router.post("/jobs")
 async def create_job(
     request: Request, csrf: Annotated[str, Form()], youtube_url: Annotated[str, Form()] = "",
@@ -303,39 +350,28 @@ async def import_cards_from_notebooklm(
     _check_csrf(request, csrf)
     state = _job(request, job_id)
     output = _safe_output(state, request.app.state.root)
-    pasted_text = cards_text.strip()
-    has_file = bool(cards_file and cards_file.filename)
-    if has_file and pasted_text:
-        return _render(request, "error.html", {"message": "Вставьте текст или загрузите файл — не оба сразу."}, 422)
-    if not has_file and not pasted_text:
-        return _render(request, "error.html", {"message": "Вставьте ответ LLM-источника или загрузите .txt файл."}, 422)
-    if has_file:
-        assert cards_file is not None
-        if Path(cards_file.filename or "").suffix.lower() != ".txt":
-            await cards_file.close()
-            return _render(request, "error.html", {"message": "Загрузите .txt файл из LLM-источника."}, 422)
-        data = await cards_file.read(2 * 1024 * 1024 + 1)
-        await cards_file.close()
-    else:
-        data = pasted_text.encode("utf-8")
-    if len(data) > 2 * 1024 * 1024:
-        return _render(request, "error.html", {"message": "Файл карточек больше 2 МБ."}, 422)
     try:
+        data = await _cards_input(cards_file, cards_text)
         import_notebooklm_cards(
             data.decode("utf-8"),
-            output / "transcript.json",
+            output / "transcript.json" if state.has_video else None,
             output / "card_candidates.json",
             append=append,
+            source=state.source,
         )
-        if not 1 <= frames_per_card <= 20 or image_policy not in {"auto", "always", "never"}:
-            raise ValueError("Некорректные параметры подбора кадров.")
-        job = request.app.state.jobs.submit(PipelineRunRequest(
-            video_path=Path(state.video_path), source=state.source, stages=["frame_extraction"],
-            frames_per_card=frames_per_card, image_policy=image_policy, force=True,
-        ))
+        if state.has_video:
+            if not 1 <= frames_per_card <= 20 or image_policy not in {"auto", "always", "never"}:
+                raise ValueError("Некорректные параметры подбора кадров.")
+            job = request.app.state.jobs.submit(PipelineRunRequest(
+                video_path=Path(state.video_path), source=state.source, stages=["frame_extraction"],
+                frames_per_card=frames_per_card, image_policy=image_policy, force=True,
+            ))
+            destination = f"/jobs/{job.job_id}"
+        else:
+            destination = f"/jobs/{job_id}/review"
     except (UnicodeDecodeError, NotebookLMImportError, ValueError) as exc:
         return _render(request, "error.html", {"message": str(exc)}, 422)
-    return RedirectResponse(f"/jobs/{job.job_id}", 303)
+    return RedirectResponse(destination, 303)
 
 
 @router.get("/jobs/{job_id}/events")
@@ -450,6 +486,8 @@ def remove_all_images(request: Request, job_id: str, csrf: Annotated[str, Form()
 def image_candidates(request: Request, job_id: str, card_id: str, csrf: Annotated[str, Form()]):
     _check_csrf(request, csrf)
     state = _job(request, job_id)
+    if not state.has_video:
+        return _render(request, "error.html", {"message": "У этого проекта нет видео для поиска кадров."}, 422)
     output = _safe_output(state, request.app.state.root)
     try:
         generate_image_candidates(Path(state.video_path), output, card_id)

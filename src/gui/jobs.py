@@ -111,13 +111,18 @@ class JobManager:
             except KeyError as exc:
                 raise KeyError("Задача не найдена.") from exc
 
-    def register_existing(self, video: Path, output: Path) -> JobState:
+    def register_existing(
+        self, video: Path, output: Path, *, source: str | None = None,
+        has_video: bool = True,
+    ) -> JobState:
         state = JobState(
-            job_id=uuid.uuid4().hex, source=video.name, video_path=str(video.resolve()),
+            job_id=uuid.uuid4().hex, source=source or video.name, video_path=str(video.resolve()),
             output_directory=str(output.resolve()), status="awaiting_review", created_at=_now(),
+            has_video=has_video,
         )
         with self._lock:
             self.jobs[state.job_id] = state
+            self._persist(state)
         return state
 
     def public(self, state: JobState) -> dict[str, object]:

@@ -61,3 +61,4 @@ class JobState:
     created_at: str = ""
     started_at: str | None = None
     finished_at: str | None = None
+    has_video: bool = True

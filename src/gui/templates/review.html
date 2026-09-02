@@ -24,9 +24,8 @@
     <label>Ответ LLM-источника<small>Строки в формате ID | Тип | Вопрос | Ответ.</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
     <div class="or" aria-hidden="true">или</div>
     <label>Файл карточек из LLM-источника (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
-    <input type="hidden" name="frames_per_card" value="5">
-    <input type="hidden" name="image_policy" value="auto">
-    <button class="primary" type="submit">Добавить и подобрать кадры</button>
+    {% if job.has_video %}<input type="hidden" name="frames_per_card" value="5"><input type="hidden" name="image_policy" value="auto">{% endif %}
+    <button class="primary" type="submit">{{ 'Добавить и подобрать кадры' if job.has_video else 'Добавить карточки' }}</button>
   </form>
 </details>
 <div id="cards">

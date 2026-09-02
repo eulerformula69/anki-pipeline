@@ -49,6 +49,20 @@ def test_import_can_append_cards_with_unique_ids(tmp_path):
     assert [card.front for card in result.card_candidates] == ["First?", "Second?"]
 
 
+def test_import_without_video_uses_project_name_and_no_source_segments(tmp_path):
+    destination = tmp_path / "card_candidates.json"
+
+    result = import_notebooklm_cards(
+        "1 | recall | What is retrieval practice? | Recalling information from memory.",
+        None,
+        destination,
+        source="Learning science",
+    )
+
+    assert result.source == "Learning science"
+    assert result.card_candidates[0].source_transcript_segment_ids == []
+
+
 def test_import_rejects_malformed_lines(tmp_path):
     transcript = tmp_path / "transcript.json"
     write_transcript(transcript)

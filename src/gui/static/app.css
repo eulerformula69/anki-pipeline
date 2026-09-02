@@ -25,6 +25,9 @@ p { margin: .75rem 0; }
 .eyebrow, .step-number { margin: 0 0 .6rem; color: var(--green); font-size: .72rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
 .panel { padding: clamp(1.5rem, 4vw, 2.5rem); background: var(--paper); border: 1px solid rgba(255, 255, 255, .8); border-radius: 1.35rem; box-shadow: var(--shadow); }
 .start-card, .job-card { max-width: 48rem; margin: 0 auto; }
+.mode-switch { display: flex; gap: .5rem; max-width: 34rem; margin: 0 auto 1rem; padding: .35rem; border-radius: 999px; background: var(--paper); box-shadow: var(--shadow); }
+.mode-switch button { flex: 1; border-radius: 999px; }
+.mode-switch button.active { background: var(--ink); color: #fff; }
 .start-card > .primary, .import-form .primary { margin-top: .5rem; }
 label { display: grid; gap: .4rem; font-weight: 650; }
 input, textarea, select, button { font: inherit; }

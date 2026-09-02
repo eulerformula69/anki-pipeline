@@ -18,6 +18,8 @@ def test_index_starts_with_transcription_and_hides_legacy_stages(tmp_path):
     assert "LLM provider" not in response.text
     assert "Кандидаты карточек" not in response.text
     assert "build_anki" not in response.text
+    assert "Только карточки" in response.text
+    assert 'action="/card-projects"' in response.text
 
 
 def test_job_ui_guides_notebooklm_handoff():
@@ -51,7 +53,8 @@ def test_recent_project_is_openable(tmp_path):
 
     page = client.get(opened.headers["location"])
     assert "Скопировать промпт" in page.text
-    assert "Create Anki cards from the important Japanese grammar" in page.text
+    assert 'id="notebooklm-prompt"' in page.text
+    assert "| type | question | answer" in page.text
 
 
 def test_recent_project_with_cards_opens_review_even_when_restored_job_is_completed(tmp_path):
@@ -96,8 +99,7 @@ def test_prompt_endpoint_is_plain_text_not_a_download(tmp_path):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
     assert "content-disposition" not in response.headers
-    assert "CARD RULES" in response.text
-    assert "Do not insert spaces inside Japanese words or particles" in response.text
+    assert "| type | question | answer" in response.text
 
 
 def test_notebooklm_cards_can_be_imported_from_pasted_text(tmp_path):
@@ -143,6 +145,29 @@ def test_notebooklm_import_requires_exactly_one_input(tmp_path):
 
     assert response.status_code == 422
     assert "не оба сразу" in response.text
+
+
+def test_card_only_project_opens_review_without_video_or_frames(tmp_path):
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+
+    response = client.post(
+        "/card-projects",
+        data={
+            "csrf": token,
+            "project_name": "Learning science",
+            "cards_text": "1 | recall | What is retrieval practice? | Recalling information from memory.",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("/review")
+    review = client.get(response.headers["location"])
+    assert review.status_code == 200
+    assert "What is retrieval practice?" in review.text
+    assert "Показать варианты кадров" not in review.text
+    assert "Добавить карточки" in review.text
 
 
 def test_review_ui_uses_candidate_thumbnails_and_non_sticky_toolbar():
