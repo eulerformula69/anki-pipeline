@@ -133,6 +133,21 @@ def test_exported_model_renders_furigana_in_japanese_text_fields(tmp_path, fake_
     assert "{{Reading}}" in template["afmt"]
 
 
+def test_exported_model_has_optional_audio_on_answer(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+
+    build_anki_deck(
+        cards, expressions, media, tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+    )
+
+    note = FakePackage.last.deck.notes[0]
+    template = note.model.kwargs["templates"][0]
+    assert FIELD_NAMES[-1] == "Audio"
+    assert note.fields[-1] == ""
+    assert "{{Audio}}" not in template["qfmt"]
+    assert '{{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}' in template["afmt"]
+
+
 def test_exported_model_hides_furigana_until_hover_without_animation(tmp_path, fake_genanki) -> None:
     cards, expressions, media = write_inputs(tmp_path, with_image=False)
 

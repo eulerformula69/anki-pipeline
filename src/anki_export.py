@@ -22,7 +22,7 @@ MODEL_ID = 1_876_543_219
 MODEL_NAME = "anki-pipeline Basic v1"
 FIELD_NAMES = (
     "Front", "Back", "Extra", "TargetText", "Reading", "Romanization",
-    "Image", "Source", "StartSeconds", "Tags",
+    "Image", "Source", "StartSeconds", "Tags", "Audio",
 )
 SAFE_CARD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$")
 FURIGANA_TAP_SCRIPT = """
@@ -231,11 +231,11 @@ def _model(genanki: Any) -> Any:
         MODEL_ID, MODEL_NAME,
         fields=[{"name": name} for name in FIELD_NAMES],
         templates=[{
-            "name": "Card 1",
+            "name": "Hybrid",
             "qfmt": '<div class="front">{{furigana:Front}}</div>{{#Image}}<div class="image">{{Image}}</div>{{/Image}}' + FURIGANA_TAP_SCRIPT,
-            "afmt": '{{FrontSide}}<hr id="answer"><div class="back">{{furigana:Back}}</div>{{#Extra}}<div class="extra">{{furigana:Extra}}</div>{{/Extra}}{{#TargetText}}<div class="target">{{furigana:TargetText}}<br><span>{{Reading}}</span></div>{{/TargetText}}' + FURIGANA_TAP_SCRIPT,
+            "afmt": '{{FrontSide}}<hr id="answer"><div class="back">{{furigana:Back}}</div>{{#Extra}}<div class="extra">{{furigana:Extra}}</div>{{/Extra}}{{#TargetText}}<div class="target">{{furigana:TargetText}}<br><span>{{Reading}}</span></div>{{/TargetText}}{{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}' + FURIGANA_TAP_SCRIPT,
         }],
-        css=""".card { font-family: Arial, 'Yu Gothic', 'Meiryo', sans-serif; font-size: 22px; text-align: left; color: #222; background: #fff; line-height: 1.45; } .front, .back { font-size: 1.15em; } .extra, .target { margin-top: 1em; font-size: .85em; color: #555; } .image { margin-top: 1em; text-align: center; } img { max-width: 100%; max-height: 55vh; }
+        css=""".card { font-family: Arial, 'Yu Gothic', 'Meiryo', sans-serif; font-size: 22px; text-align: left; color: #222; background: #fff; line-height: 1.45; } .front, .back { font-size: 1.15em; } .extra, .target { margin-top: 1em; font-size: .85em; color: #555; } .audio { margin-top: 1em; } .image { margin-top: 1em; text-align: center; } img { max-width: 100%; max-height: 55vh; }
 
 /* furigana-on-hover */
 ruby rt {
@@ -414,7 +414,7 @@ def build_anki_deck(
                 _anki_html_text(card.extra), _anki_html_text(target_text),
                 _anki_html_text(reading), _anki_html_text(romanization), image_html,
                 html.escape(source), "" if start_seconds is None else f"{start_seconds:.3f}",
-                html.escape(" ".join(anki_tags)),
+                html.escape(" ".join(anki_tags)), "",
             ]
             deck.add_note(_stable_note(genanki, guid, model, fields, anki_tags))
             exported.append(ExportedNote(
