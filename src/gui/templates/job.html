@@ -26,7 +26,7 @@
     </div>
     <form class="import-form" method="post" action="/jobs/{{ job.job_id }}/notebooklm-cards" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <label>Ответ LLM-источника<small>Вставьте строки в формате ID | Тип | Вопрос | Ответ.</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
+      <label>Ответ LLM-источника<small>Вставьте строки в формате ID | Тип | Вопрос | Ответ. Формулы можно записывать как \(L'(w)=0\).</small><textarea name="cards_text" placeholder="1 | application | ... | ..."></textarea></label>
       <div class="or" aria-hidden="true">или</div>
       <label>Файл карточек из LLM-источника (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
       <input type="hidden" name="frames_per_card" value="5">

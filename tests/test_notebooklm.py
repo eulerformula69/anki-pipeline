@@ -63,6 +63,22 @@ def test_import_without_video_uses_project_name_and_no_source_segments(tmp_path)
     assert result.card_candidates[0].source_transcript_segment_ids == []
 
 
+def test_import_preserves_inline_mathjax_verbatim(tmp_path):
+    destination = tmp_path / "card_candidates.json"
+    formula = r"\(L'(w)=2(w-4)+2\lambda w=4w-8\)"
+
+    result = import_notebooklm_cards(
+        f"1 | application | Find the optimum. | {formula}",
+        None,
+        destination,
+        source="Regularization",
+    )
+
+    assert result.card_candidates[0].back == formula
+    saved = json.loads(destination.read_text(encoding="utf-8"))
+    assert saved["card_candidates"][0]["back"] == formula
+
+
 def test_import_rejects_malformed_lines(tmp_path):
     transcript = tmp_path / "transcript.json"
     write_transcript(transcript)

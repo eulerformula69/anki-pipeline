@@ -10,6 +10,7 @@ import pytest
 from src.anki_export import (
     AnkiExportError,
     FIELD_NAMES,
+    _anki_html_text,
     build_anki_deck,
     load_card_candidates,
     load_card_media,
@@ -18,6 +19,14 @@ from src.anki_export import (
     stable_guid,
     stage_media_image,
 )
+
+
+def test_anki_html_preserves_mathjax_and_escapes_only_html() -> None:
+    source = r"Find \(L'(w)=2(w-4)+2\lambda w\) when \(w<4\)."
+
+    assert _anki_html_text(source) == (
+        r"Find \(L&#x27;(w)=2(w-4)+2\lambda w\) when \(w&lt;4\)."
+    )
 
 
 def write_inputs(root: Path, *, with_image: bool = True) -> tuple[Path, Path, Path]:
@@ -131,6 +140,23 @@ def test_exported_model_renders_furigana_in_japanese_text_fields(tmp_path, fake_
     assert "{{furigana:Extra}}" in template["afmt"]
     assert "{{furigana:TargetText}}" in template["afmt"]
     assert "{{Reading}}" in template["afmt"]
+
+
+def test_exported_model_keeps_wide_mathjax_inside_card(tmp_path, fake_genanki) -> None:
+    cards, expressions, media = write_inputs(tmp_path, with_image=False)
+    data = json.loads(cards.read_text(encoding="utf-8"))
+    formula = r"\(X^\top X+\lambda I\)"
+    data["card_candidates"][0]["back"] = formula
+    cards.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    build_anki_deck(
+        cards, expressions, media, tmp_path / "lesson.apkg", tmp_path / "manifest.json",
+    )
+
+    note = FakePackage.last.deck.notes[0]
+    assert note.fields[1] == formula
+    assert "mjx-container" in note.model.kwargs["css"]
+    assert "overflow-x: auto" in note.model.kwargs["css"]
 
 
 def test_exported_model_has_optional_audio_on_answer(tmp_path, fake_genanki) -> None:
