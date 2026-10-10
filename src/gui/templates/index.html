@@ -2,65 +2,27 @@
 {% block title %}Новая колода · anki-pipeline{% endblock %}
 {% block content %}
 <section class="hero">
-  <p class="eyebrow">ПЛАТФОРМА ДЛЯ ОБУЧЕНИЯ</p>
-  <h1>Ваша колода начинается с хороших карточек.</h1>
-  <p class="hero-copy">Конвейер подготовит транскрипцию и кадры. Содержание карточек создаёт LLM-источник — вы сохраняете полный контроль над тем, что попадёт в Anki.</p>
+  <p class="eyebrow">НОВАЯ КОЛОДА</p>
+  <h1>Превратите ответ LLM в колоду Anki.</h1>
+  <p>Вставьте готовые карточки, проверьте их и скачайте `.apkg`.</p>
 </section>
 
-<div class="mode-switch" role="tablist" aria-label="Источник карточек">
-  <button type="button" class="active" data-mode="video">Из видео</button>
-  <button type="button" data-mode="cards">Только карточки</button>
-</div>
-
-<form id="video-mode" class="panel start-card" method="post" action="/jobs" enctype="multipart/form-data">
+<form class="panel start-card" method="post" action="/projects" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <input type="hidden" name="stages" value="transcription">
-  <p class="step-number">Шаг 1 из 3</p>
-  <h2>Добавьте видео</h2>
-  <p class="hint">Подойдёт ссылка на один ролик YouTube или файл записи лекции.</p>
-  <div class="source-grid">
-    <label>Ссылка YouTube<input type="url" name="youtube_url" placeholder="https://www.youtube.com/watch?v=..."></label>
-    <div class="or">или</div>
-    <label>Видеофайл<input type="file" name="video_file" accept="video/*,.mkv"></label>
-  </div>
-  <button class="primary" type="submit">Создать транскрипцию</button>
-  <p class="safety">На этом шаге карточки не создаются и в Anki ничего не экспортируется.</p>
-  <details class="advanced"><summary>Настроить распознавание речи</summary>
-    <div class="fields">
-      <label>Язык речи<input name="language" placeholder="Автоматически"></label>
-      <label>Модель распознавания<input name="model" value="small"></label>
-      <label>Устройство<select name="device"><option>auto</option><option>cuda</option><option>cpu</option></select></label>
-    </div>
-  </details>
+  <label>Название проекта<input name="project_name" maxlength="120" required placeholder="Например, Машинное обучение · лекция 4"></label>
+  <label>Ответ LLM<small>Одна строка: ID | type | question | answer</small><textarea name="cards_text" rows="12" placeholder="1 | recall | Что такое градиент? | Вектор частных производных."></textarea></label>
+  <div class="or">или</div>
+  <label>Текстовый файл<input name="cards_file" type="file" accept=".txt,text/plain"></label>
+  <button class="primary" type="submit">Проверить карточки</button>
+  <a class="secondary" href="/prompt" target="_blank">Открыть промпт для LLM</a>
 </form>
 
-<form id="cards-mode" class="panel start-card hidden" method="post" action="/card-projects" enctype="multipart/form-data">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <p class="step-number">Новый проект</p>
-  <h2>Добавьте готовые карточки</h2>
-  <p class="hint">Без видео, транскрипции и кадров. После импорта вы сразу перейдёте к проверке и экспорту в Anki.</p>
-  <label>Название проекта<input name="project_name" maxlength="120" required placeholder="Например, Японская грамматика — сентябрь"></label>
-  <label>Ответ LLM-источника<small>Строки в формате ID | Тип | Вопрос | Ответ. Формулы можно записывать как \(L'(w)=0\).</small><textarea name="cards_text" placeholder="1 | recall | ... | ..."></textarea></label>
-  <div class="or" aria-hidden="true">или</div>
-  <label>Файл карточек (.txt)<input name="cards_file" type="file" accept=".txt,text/plain"></label>
-  <button class="primary" type="submit">Перейти к проверке</button>
-</form>
-
-<section class="workflow-preview" aria-label="Как это работает">
-  <article><span>1</span><h2>Транскрипция</h2><p>Получите текст видео с таймкодами.</p></article>
-  <article><span>2</span><h2>LLM-источник</h2><p>Создайте карточки с вашим промптом.</p></article>
-  <article><span>3</span><h2>Кадры и Anki</h2><p>Подберите изображения, проверьте и экспортируйте колоду.</p></article>
+{% if projects %}
+<section class="panel projects">
+  <h2>Проекты</h2>
+  {% for project in projects %}
+  <a class="project-row" href="/projects/{{ project.id }}"><strong>{{ project.name }}</strong><span>{{ project.cards|length }} карточек</span><b>Открыть →</b></a>
+  {% endfor %}
 </section>
-
-{% if projects %}<section class="panel project-panel"><h2>Недавние проекты</h2><div class="project-list">
-{% for project in projects %}<a class="project-row" href="{{ project.url }}"><strong>{{ project.name }}</strong><span>Проверка: {{ project.review or 'не начата' }}</span><span>Колода: {{ 'готова' if project.deck else 'ещё не собрана' }}</span><span class="project-open">Открыть →</span></a>{% endfor %}
-</div></section>{% endif %}
-<script>
-const modeButtons = document.querySelectorAll('[data-mode]');
-const modeForms = {video: document.querySelector('#video-mode'), cards: document.querySelector('#cards-mode')};
-modeButtons.forEach(button => button.addEventListener('click', () => {
-  modeButtons.forEach(item => item.classList.toggle('active', item === button));
-  Object.entries(modeForms).forEach(([mode, form]) => form.classList.toggle('hidden', mode !== button.dataset.mode));
-}));
-</script>
+{% endif %}
 {% endblock %}
