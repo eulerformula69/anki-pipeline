@@ -52,7 +52,7 @@
       {% elif card.forvo_url %}
       <p class="audio-status">Открытой записи пока нет. <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">Найти на Forvo</a></p>
       {% endif %}
-      <label>Загрузить свою запись <small>MP3, OGG, OGA или WAV, до 10 МБ</small><input name="audio_file" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.oga,.wav"></label>
+      <label>Загрузить свою запись <small>Файл сохранится сразу. MP3, OGG, OGA или WAV, до 10 МБ</small><input name="audio_file" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.oga,.wav" data-auto-submit></label>
     </div>
     <label>Теги<input name="tags" value="{{ card.tags|join(', ') }}"></label>
     <button>Сохранить карточку</button>

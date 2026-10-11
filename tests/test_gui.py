@@ -28,6 +28,9 @@ def test_full_card_flow(tmp_path, monkeypatch) -> None:
     assert "Найти аудио носителей" in page.text
     assert 'name="audio_text"' in page.text
     assert 'name="audio_reading"' in page.text
+    assert "data-auto-submit" in page.text
+    assert '/static/app.js' in page.text
+    assert "requestSubmit" in client.get("/static/app.js").text
 
 
 def test_create_requires_exactly_one_card_input(tmp_path) -> None:

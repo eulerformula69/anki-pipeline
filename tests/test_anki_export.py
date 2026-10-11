@@ -1,3 +1,4 @@
+import re
 import sqlite3
 import sys
 import types
@@ -6,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from src.anki_export import AnkiExportError, _anki_html_text, build_anki_deck, stable_guid
+from src.anki_export import (
+    AnkiExportError,
+    _anki_html_text,
+    _media_filename,
+    build_anki_deck,
+    stable_guid,
+)
 
 
 class FakeModel:
@@ -58,6 +65,7 @@ def project() -> dict:
     return {
         "id": "test-1234",
         "name": "Test",
+        "created_at": "2026-10-11T12:00:00Z",
         "cards": [{
             "id": "card_0001",
             "type": "recall",
@@ -102,8 +110,25 @@ def test_export_packages_attached_audio(tmp_path, fake_genanki) -> None:
 
     build_anki_deck(value, tmp_path / "deck.apkg", deck_name="Test", global_tags=[])
 
-    assert FakePackage.last.deck.notes[0].fields[-1] == "[sound:card_0001.mp3]"
-    assert FakePackage.last.media_files == [str(media)]
+    audio_field = FakePackage.last.deck.notes[0].fields[-1]
+    assert re.fullmatch(r"\[sound:anki_audio_20261011_[0-9a-f]{24}\.mp3\]", audio_field)
+    assert Path(FakePackage.last.media_files[0]).name == audio_field.removeprefix(
+        "[sound:"
+    ).removesuffix("]")
+
+
+def test_media_names_differ_between_projects_and_cards(tmp_path) -> None:
+    source = tmp_path / "card_0012.mp3"
+    source.write_bytes(b"ID3same-audio")
+    first = project()
+    second = project()
+    second["id"] = "other-project"
+
+    first_name = _media_filename(first, first["cards"][0], source)
+    second_name = _media_filename(second, second["cards"][0], source)
+
+    assert first_name != second_name
+    assert first_name.startswith("anki_audio_20261011_")
 
 
 def test_export_rejects_empty_selection(tmp_path) -> None:
