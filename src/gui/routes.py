@@ -122,6 +122,7 @@ def review(request: Request, project_id: str) -> HTMLResponse:
             "audio_missing": request.query_params.get("audio_missing"),
             "audio_failed": request.query_params.get("audio_failed"),
             "audio_uploaded": request.query_params.get("audio_uploaded"),
+            "deck_created": request.query_params.get("exported"),
         },
     )
 

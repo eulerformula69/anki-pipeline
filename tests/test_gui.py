@@ -28,8 +28,13 @@ def test_full_card_flow(tmp_path, monkeypatch) -> None:
     assert "Найти аудио носителей" in page.text
     assert 'name="audio_text"' in page.text
     assert 'name="audio_reading"' in page.text
-    assert "this.form.submit()" in page.text
+    assert "this.form.requestSubmit()" in page.text
     assert "Загружаем аудио…" in page.text
+    assert "data-async-page" in page.text
+    assert "Создаём `.apkg`…" in page.text
+    script = client.get("/static/app.js?v=3")
+    assert script.status_code == 200
+    assert 'fetch(form.action' in script.text
 
 
 def test_create_requires_exactly_one_card_input(tmp_path) -> None:

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} · anki-pipeline{% endblock %}
 {% block content %}
+<div data-async-page>
 <section class="panel toolbar">
   <div><p class="eyebrow">ПРОВЕРКА</p><h1>{{ project.name }}</h1><p>{{ included }} из {{ project.cards|length }} карточек войдут в колоду.</p></div>
   <div class="toolbar-actions">
-    <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Найти аудио носителей</button></form>
-    <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">+ Карточка</button></form>
+    <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button data-busy-label="Ищем аудио…">Найти аудио носителей</button></form>
+    <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary" data-busy-label="Добавляем…">+ Карточка</button></form>
   </div>
 </section>
 
@@ -13,6 +14,7 @@
 <p class="notice">Найдено записей: {{ audio_found }}. Без совпадения: {{ audio_missing }}. Ошибок загрузки: {{ audio_failed }}.</p>
 {% endif %}
 {% if audio_uploaded %}<p class="notice">Аудио сохранено.</p>{% endif %}
+{% if deck_created %}<p class="notice">Колода создана.</p>{% endif %}
 
 <details class="panel add-cards">
   <summary>Добавить ответ LLM</summary>
@@ -21,7 +23,7 @@
     <label>Ответ LLM<textarea name="cards_text" rows="8" placeholder="1 | application | ... | ..."></textarea></label>
     <div class="or">или</div>
     <label>Текстовый файл<input name="cards_file" type="file" accept=".txt,text/plain"></label>
-    <button class="primary">Добавить карточки</button>
+    <button class="primary" data-busy-label="Добавляем…">Добавить карточки</button>
   </form>
 </details>
 
@@ -56,11 +58,11 @@
       <label>Загрузить свою запись
         <small>Файл сохранится сразу. MP3, OGG, OGA или WAV, до 10 МБ</small>
         <small class="audio-upload-status">Загружаем аудио…</small>
-        <input name="audio_file" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.oga,.wav" onchange="if (this.files.length) { this.form.classList.add('uploading'); document.body.classList.add('uploading-audio'); this.form.submit(); }">
+        <input name="audio_file" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.oga,.wav" onchange="if (this.files.length) { this.form.dataset.audioUpload = '1'; this.form.requestSubmit(); }">
       </label>
     </div>
     <label>Теги<input name="tags" value="{{ card.tags|join(', ') }}"></label>
-    <button>Сохранить карточку</button>
+    <button data-busy-label="Сохраняем…">Сохранить карточку</button>
   </form>
 </article>
 {% endfor %}
@@ -72,8 +74,9 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label>Название колоды<input name="deck_name" maxlength="120" value="{{ project.name }}" required></label>
     <label>Общие теги<input name="global_tags" placeholder="japanese, lesson-24"></label>
-    <button class="primary">Создать `.apkg`</button>
+    <button class="primary" data-busy-label="Создаём `.apkg`…">Создать `.apkg`</button>
   </form>
   {% if deck_ready %}<a class="download" href="/projects/{{ project.id }}/deck">Скачать готовую колоду</a>{% endif %}
 </section>
+</div>
 {% endblock %}
