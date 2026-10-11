@@ -54,6 +54,9 @@ button:disabled { cursor: default; opacity: .35; }
 .audio-status { margin: 0; color: var(--muted); font-size: .9rem; }
 .audio-status a { color: var(--green); font-weight: 750; }
 .audio-preview { width: min(100%, 28rem); }
+.audio-upload-status { display: none; color: var(--green); }
+.editor.uploading .audio-upload-status { display: block; }
+body.uploading-audio button { pointer-events: none; opacity: .35; }
 .card-head { display: flex; gap: .8rem; align-items: center; }
 .card-head span { padding: .2rem .5rem; border-radius: 999px; background: #e1ede4; color: var(--green); font-size: .75rem; font-weight: 800; text-transform: uppercase; }
 .check { display: flex; margin-left: auto; align-items: center; }

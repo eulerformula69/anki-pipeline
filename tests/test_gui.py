@@ -28,9 +28,8 @@ def test_full_card_flow(tmp_path, monkeypatch) -> None:
     assert "Найти аудио носителей" in page.text
     assert 'name="audio_text"' in page.text
     assert 'name="audio_reading"' in page.text
-    assert "data-auto-submit" in page.text
-    assert '/static/app.js' in page.text
-    assert "requestSubmit" in client.get("/static/app.js").text
+    assert "this.form.submit()" in page.text
+    assert "Загружаем аудио…" in page.text
 
 
 def test_create_requires_exactly_one_card_input(tmp_path) -> None:
@@ -105,6 +104,7 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
     )
 
     assert uploaded.status_code == 303
+    assert "audio_uploaded=1" in uploaded.headers["location"]
     project_id = project_url.rsplit("/", 1)[-1]
     card = client.app.state.projects.load(project_id)["cards"][0]
     assert card["audio"]["source"] == "Загружено вручную"

@@ -12,6 +12,7 @@
 {% if audio_found is not none %}
 <p class="notice">Найдено записей: {{ audio_found }}. Без совпадения: {{ audio_missing }}. Ошибок загрузки: {{ audio_failed }}.</p>
 {% endif %}
+{% if audio_uploaded %}<p class="notice">Аудио сохранено.</p>{% endif %}
 
 <details class="panel add-cards">
   <summary>Добавить ответ LLM</summary>
@@ -52,7 +53,11 @@
       {% elif card.forvo_url %}
       <p class="audio-status">Открытой записи пока нет. <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">Найти на Forvo</a></p>
       {% endif %}
-      <label>Загрузить свою запись <small>Файл сохранится сразу. MP3, OGG, OGA или WAV, до 10 МБ</small><input name="audio_file" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.oga,.wav" data-auto-submit></label>
+      <label>Загрузить свою запись
+        <small>Файл сохранится сразу. MP3, OGG, OGA или WAV, до 10 МБ</small>
+        <small class="audio-upload-status">Загружаем аудио…</small>
+        <input name="audio_file" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.oga,.wav" onchange="if (this.files.length) { this.form.classList.add('uploading'); document.body.classList.add('uploading-audio'); this.form.submit(); }">
+      </label>
     </div>
     <label>Теги<input name="tags" value="{{ card.tags|join(', ') }}"></label>
     <button>Сохранить карточку</button>

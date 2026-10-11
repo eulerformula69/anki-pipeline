@@ -121,6 +121,7 @@ def review(request: Request, project_id: str) -> HTMLResponse:
             "audio_found": request.query_params.get("audio_found"),
             "audio_missing": request.query_params.get("audio_missing"),
             "audio_failed": request.query_params.get("audio_failed"),
+            "audio_uploaded": request.query_params.get("audio_uploaded"),
         },
     )
 
@@ -204,7 +205,8 @@ async def update_card(
             )
     except ProjectError as exc:
         return _error(request, str(exc))
-    return RedirectResponse(f"/projects/{project_id}#{card_id}", 303)
+    suffix = "?audio_uploaded=1" if upload else ""
+    return RedirectResponse(f"/projects/{project_id}{suffix}#{card_id}", 303)
 
 
 @router.post("/projects/{project_id}/audio/find")
