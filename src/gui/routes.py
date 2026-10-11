@@ -4,11 +4,13 @@ import re
 import secrets
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from ..audio_sources import AudioDownload, AudioLookupError, find_commons_audio, forvo_search_url
 from ..anki_export import AnkiExportError, build_anki_deck
 from ..project_store import ProjectError
 
@@ -16,6 +18,8 @@ from ..project_store import ProjectError
 router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 MAX_CARDS_UPLOAD = 2 * 1024 * 1024
+MAX_AUDIO_UPLOAD = 10 * 1024 * 1024
+ALLOWED_AUDIO_SUFFIXES = {".mp3", ".ogg", ".oga", ".wav"}
 PROMPT_PATH = Path(__file__).parents[2] / "notebooklm-prompt.md"
 
 
@@ -104,10 +108,19 @@ def review(request: Request, project_id: str) -> HTMLResponse:
         return _error(request, str(exc), 404)
     included = sum(card["included"] for card in project["cards"])
     deck_ready = (request.app.state.projects.root / project_id / "deck.apkg").is_file()
+    for card in project["cards"]:
+        card["forvo_url"] = forvo_search_url(card["audio_text"]) if card["audio_text"] else ""
     return _render(
         request,
         "review.html",
-        {"project": project, "included": included, "deck_ready": deck_ready},
+        {
+            "project": project,
+            "included": included,
+            "deck_ready": deck_ready,
+            "audio_found": request.query_params.get("audio_found"),
+            "audio_missing": request.query_params.get("audio_missing"),
+            "audio_failed": request.query_params.get("audio_failed"),
+        },
     )
 
 
@@ -139,7 +152,7 @@ def add_card(request: Request, project_id: str, csrf: Annotated[str, Form()]):
 
 
 @router.post("/projects/{project_id}/cards/{card_id}")
-def update_card(
+async def update_card(
     request: Request,
     project_id: str,
     card_id: str,
@@ -147,20 +160,86 @@ def update_card(
     front: Annotated[str, Form()] = "",
     back: Annotated[str, Form()] = "",
     extra: Annotated[str, Form()] = "",
+    audio_text: Annotated[str, Form()] = "",
     tags: Annotated[str, Form()] = "",
     included: Annotated[bool, Form()] = False,
+    audio_file: Annotated[UploadFile | None, File()] = None,
 ):
     _check_csrf(request, csrf)
     parsed_tags = [tag for tag in re.split(r"[,\s]+", tags) if tag]
+    upload: tuple[bytes, str] | None = None
+    if audio_file and audio_file.filename:
+        suffix = Path(audio_file.filename).suffix.casefold()
+        if suffix not in ALLOWED_AUDIO_SUFFIXES:
+            await audio_file.close()
+            return _error(request, "Аудио должно быть в формате MP3, OGG, OGA или WAV.")
+        data = await audio_file.read(MAX_AUDIO_UPLOAD + 1)
+        await audio_file.close()
+        if len(data) > MAX_AUDIO_UPLOAD:
+            return _error(request, "Аудиофайл больше 10 МБ.")
+        upload = (data, suffix)
     try:
         request.app.state.projects.update_card(
             project_id,
             card_id,
-            {"front": front, "back": back, "extra": extra, "tags": parsed_tags, "included": included},
+            {
+                "front": front,
+                "back": back,
+                "extra": extra,
+                "audio_text": audio_text,
+                "tags": parsed_tags,
+                "included": included,
+            },
         )
+        if upload:
+            data, suffix = upload
+            request.app.state.projects.attach_audio(
+                project_id,
+                card_id,
+                AudioDownload(data, suffix, "", "", ""),
+                source="Загружено вручную",
+            )
     except ProjectError as exc:
         return _error(request, str(exc))
     return RedirectResponse(f"/projects/{project_id}#{card_id}", 303)
+
+
+@router.post("/projects/{project_id}/audio/find")
+def find_audio(request: Request, project_id: str, csrf: Annotated[str, Form()]):
+    _check_csrf(request, csrf)
+    try:
+        project = request.app.state.projects.load(project_id)
+    except ProjectError as exc:
+        return _error(request, str(exc), 404)
+    found = missing = failed = 0
+    candidates = [
+        card for card in project["cards"]
+        if card["included"]
+        and card["audio_text"]
+        and (
+            not card["audio"]
+            or card["audio"].get("text", card["audio_text"]) != card["audio_text"]
+        )
+    ]
+    for index, card in enumerate(candidates):
+        try:
+            download = find_commons_audio(card["audio_text"])
+        except AudioLookupError:
+            failed += len(candidates) - index
+            break
+        if download is None:
+            missing += 1
+            continue
+        try:
+            request.app.state.projects.attach_audio(
+                project_id, card["id"], download, source="Wikimedia Commons"
+            )
+        except ProjectError:
+            failed += 1
+            continue
+        found += 1
+    query = urlencode({"audio_found": found, "audio_missing": missing, "audio_failed": failed})
+    return RedirectResponse(f"/projects/{project_id}?{query}", 303)
 
 
 @router.post("/projects/{project_id}/cards/{card_id}/move")

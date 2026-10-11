@@ -3,8 +3,15 @@
 {% block content %}
 <section class="panel toolbar">
   <div><p class="eyebrow">ПРОВЕРКА</p><h1>{{ project.name }}</h1><p>{{ included }} из {{ project.cards|length }} карточек войдут в колоду.</p></div>
-  <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">+ Карточка</button></form>
+  <div class="toolbar-actions">
+    <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Найти аудио</button></form>
+    <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">+ Карточка</button></form>
+  </div>
 </section>
+
+{% if audio_found is not none %}
+<p class="notice">Найдено записей: {{ audio_found }}. Без совпадения: {{ audio_missing }}. Ошибок загрузки: {{ audio_failed }}.</p>
+{% endif %}
 
 <details class="panel add-cards">
   <summary>Добавить ответ LLM</summary>
@@ -25,12 +32,26 @@
     <button name="direction" value="up" {% if loop.first %}disabled{% endif %}>↑</button>
     <button name="direction" value="down" {% if loop.last %}disabled{% endif %}>↓</button>
   </form>
-  <form class="editor" method="post" action="/projects/{{ project.id }}/cards/{{ card.id }}">
+  <form class="editor" method="post" enctype="multipart/form-data" action="/projects/{{ project.id }}/cards/{{ card.id }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="card-head"><strong>{{ card.id }}</strong><span>{{ card.type }}</span><label class="check"><input type="checkbox" name="included" value="true" {% if card.included %}checked{% endif %}> Включить</label></div>
     <label>Вопрос<textarea name="front" required>{{ card.front }}</textarea></label>
     <label>Ответ<textarea name="back" required>{{ card.back }}</textarea></label>
     <label>Дополнение<textarea name="extra">{{ card.extra }}</textarea></label>
+    <div class="audio-editor">
+      <label>Текст для поиска аудио<input name="audio_text" value="{{ card.audio_text }}" placeholder="関する"></label>
+      {% if card.audio and card.audio.text == card.audio_text %}
+      <p class="audio-status">Запись добавлена:
+        {% if card.audio.source_url %}<a href="{{ card.audio.source_url }}" target="_blank" rel="noopener">{{ card.audio.source }}</a>{% else %}{{ card.audio.source }}{% endif %}
+        {% if card.audio.license %} · {{ card.audio.license }}{% endif %}
+      </p>
+      {% elif card.audio %}
+      <p class="audio-status">Текст изменён. Найдите или загрузите запись заново.</p>
+      {% elif card.forvo_url %}
+      <p class="audio-status">Открытой записи пока нет. <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">Найти на Forvo</a></p>
+      {% endif %}
+      <label>Загрузить свою запись <small>MP3, OGG, OGA или WAV, до 10 МБ</small><input name="audio_file" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.oga,.wav"></label>
+    </div>
     <label>Теги<input name="tags" value="{{ card.tags|join(', ') }}"></label>
     <button>Сохранить карточку</button>
   </form>

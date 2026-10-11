@@ -28,3 +28,5 @@ def test_project_cards_get_stable_internal_ids() -> None:
     assert cards[0]["id"] == "card_0007"
     assert cards[0]["source_id"] == "abc"
     assert cards[0]["tags"] == ["LLM-source", "recall"]
+    assert cards[0]["audio_text"] == ""
+    assert cards[0]["audio"] is None

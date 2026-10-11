@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 
-MODEL_ID = 1_876_543_219
-MODEL_NAME = "anki-pipeline Basic v2"
-FIELD_NAMES = ("Front", "Back", "Extra", "CardType", "Source")
+MODEL_ID = 1_876_543_220
+MODEL_NAME = "anki-pipeline Basic v3"
+FIELD_NAMES = ("Front", "Back", "Extra", "CardType", "Source", "Audio")
 FURIGANA_TAP_SCRIPT = """
 <!-- furigana-tap-toggle -->
 <script>
@@ -73,11 +73,13 @@ def _model(genanki: Any) -> Any:
             "qfmt": '<div class="front">{{furigana:Front}}</div>' + FURIGANA_TAP_SCRIPT,
             "afmt": '{{FrontSide}}<hr id="answer"><div class="back">{{furigana:Back}}</div>'
             '{{#Extra}}<div class="extra">{{furigana:Extra}}</div>{{/Extra}}'
+            '{{#Audio}}<div class="audio">{{Audio}}</div>{{/Audio}}'
             + FURIGANA_TAP_SCRIPT,
         }],
         css=""".card { font-family: Arial, 'Yu Gothic', 'Meiryo', sans-serif; font-size: 22px; text-align: left; color: #222; background: #fff; line-height: 1.45; }
 .front, .back { font-size: 1.15em; }
 .extra { margin-top: 1em; font-size: .85em; color: #555; }
+.audio { margin-top: 1em; }
 mjx-container { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 ruby rt { visibility: hidden; }
 ruby:hover rt { visibility: visible; }
@@ -134,25 +136,44 @@ def build_anki_deck(
     project_id = project["id"]
     deck = genanki.Deck(stable_deck_id(project_id), deck_name)
     model = _model(genanki)
+    media_files: list[str] = []
     for card in cards:
         tags = [
             re.sub(r"\s+", "_", tag.strip())
             for tag in dict.fromkeys([*card["tags"], *global_tags])
             if tag.strip()
         ]
+        audio_field = ""
+        audio = card.get("audio")
+        if (
+            isinstance(audio, dict)
+            and audio.get("path")
+            and audio.get("text", card.get("audio_text", "")) == card.get("audio_text", "")
+        ):
+            relative = Path(audio["path"])
+            source = (destination.parent / relative).resolve()
+            if relative.is_absolute() or ".." in relative.parts:
+                raise AnkiExportError(f"Некорректный путь аудио у {card['id']}.")
+            if not source.is_relative_to(destination.parent.resolve()) or not source.is_file():
+                raise AnkiExportError(f"Не найден аудиофайл карточки {card['id']}.")
+            media_files.append(str(source))
+            audio_field = f"[sound:{source.name}]"
         fields = [
             _anki_html_text(card["front"]),
             _anki_html_text(card["back"]),
             _anki_html_text(card["extra"]),
             card["type"],
             project["name"],
+            audio_field,
         ]
         deck.add_note(_note(genanki, stable_guid(project_id, card["id"]), model, fields, tags))
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.name}.tmp")
     try:
-        genanki.Package(deck).write_to_file(str(temporary))
+        package = genanki.Package(deck)
+        package.media_files = media_files
+        package.write_to_file(str(temporary))
         count = packaged_card_count(temporary)
         if count != len(cards):
             raise AnkiExportError(f"Проверка колоды: ожидалось {len(cards)}, найдено {count}.")

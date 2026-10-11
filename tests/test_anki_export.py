@@ -31,7 +31,7 @@ class FakePackage:
     last = None
 
     def __init__(self, deck):
-        self.deck = deck
+        self.deck, self.media_files = deck, []
         FakePackage.last = self
 
     def write_to_file(self, path):
@@ -81,6 +81,28 @@ def test_export_builds_checked_deck_and_preserves_math(tmp_path, fake_genanki) -
     assert note.tags == ["LLM-source", "lesson_1"]
     assert note.guid == stable_guid("test-1234", "card_0001")
     assert "furigana-tap-toggle" in note.model.kwargs["templates"][0]["qfmt"]
+    assert note.fields[-1] == ""
+    assert "{{Audio}}" in note.model.kwargs["templates"][0]["afmt"]
+
+
+def test_export_packages_attached_audio(tmp_path, fake_genanki) -> None:
+    value = project()
+    media = tmp_path / "media" / "card_0001.mp3"
+    media.parent.mkdir()
+    media.write_bytes(b"ID3audio")
+    value["cards"][0]["audio"] = {
+        "path": "media/card_0001.mp3",
+        "text": "",
+        "source": "manual",
+        "source_url": "",
+        "license": "personal",
+        "attribution": "",
+    }
+
+    build_anki_deck(value, tmp_path / "deck.apkg", deck_name="Test", global_tags=[])
+
+    assert FakePackage.last.deck.notes[0].fields[-1] == "[sound:card_0001.mp3]"
+    assert FakePackage.last.media_files == [str(media)]
 
 
 def test_export_rejects_empty_selection(tmp_path) -> None:

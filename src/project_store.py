@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .card_input import CardInputError, parse_llm_response, to_project_cards
+from .audio_sources import AudioDownload, infer_audio_text
 
 
 PROJECT_ID = re.compile(r"^[A-Za-z0-9А-Яа-яЁё_-]{1,80}$")
@@ -105,6 +106,10 @@ class ProjectStore:
             if not isinstance(value, str):
                 raise ProjectError(f"Поле {field} должно быть текстом.")
             card[field] = value
+        audio_text = updates.get("audio_text", card.get("audio_text", ""))
+        if not isinstance(audio_text, str):
+            raise ProjectError("Текст для аудио должен быть строкой.")
+        card["audio_text"] = audio_text.strip()
         tags = updates.get("tags")
         if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
             raise ProjectError("Теги должны быть списком строк.")
@@ -123,6 +128,8 @@ class ProjectStore:
             "front": "",
             "back": "",
             "extra": "",
+            "audio_text": "",
+            "audio": None,
             "tags": ["manual"],
             "included": True,
         })
@@ -141,6 +148,34 @@ class ProjectStore:
             project["cards"][index], project["cards"][target] = project["cards"][target], project["cards"][index]
             self.save(project)
 
+    def attach_audio(
+        self, project_id: str, card_id: str, download: AudioDownload, *, source: str
+    ) -> None:
+        if download.suffix not in {".mp3", ".ogg", ".oga", ".wav"} or not download.data:
+            raise ProjectError("Некорректный аудиофайл.")
+        project = self.load(project_id)
+        card = self._card(project, card_id)
+        media_directory = self._path(project_id).parent / "media"
+        media_directory.mkdir(parents=True, exist_ok=True)
+        destination = media_directory / f"{card_id}{download.suffix}"
+        temporary = media_directory / f".{card_id}{download.suffix}.tmp"
+        temporary.write_bytes(download.data)
+        temporary.replace(destination)
+        previous = card.get("audio")
+        if isinstance(previous, dict) and previous.get("path") != f"media/{destination.name}":
+            old_path = self._path(project_id).parent / str(previous.get("path", ""))
+            if old_path.resolve().is_relative_to(media_directory.resolve()):
+                old_path.unlink(missing_ok=True)
+        card["audio"] = {
+            "path": f"media/{destination.name}",
+            "text": card["audio_text"],
+            "source": source,
+            "source_url": download.source_url,
+            "license": download.license_name,
+            "attribution": download.attribution,
+        }
+        self.save(project)
+
     def _path(self, project_id: str) -> Path:
         if not PROJECT_ID.fullmatch(project_id):
             raise ProjectError("Некорректный идентификатор проекта.")
@@ -158,6 +193,16 @@ class ProjectStore:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ProjectError("Проект не найден или повреждён.") from exc
+        if isinstance(value, dict) and isinstance(value.get("cards"), list):
+            for card in value["cards"]:
+                if isinstance(card, dict):
+                    card.setdefault(
+                        "audio_text",
+                        infer_audio_text(str(card.get("front", "")), str(card.get("back", ""))),
+                    )
+                    card.setdefault("audio", None)
+                    if isinstance(card["audio"], dict):
+                        card["audio"].setdefault("text", card["audio_text"])
         self._validate(value)
         return deepcopy(value)
 
@@ -181,6 +226,16 @@ class ProjectStore:
                 raise ProjectError("Некорректный идентификатор карточки.")
             if any(not isinstance(card.get(field), str) for field in ("front", "back", "extra", "type")):
                 raise ProjectError(f"{card['id']}: текстовые поля повреждены.")
+            if not isinstance(card.get("audio_text"), str):
+                raise ProjectError(f"{card['id']}: текст для аудио повреждён.")
+            audio = card.get("audio")
+            if audio is not None and (
+                not isinstance(audio, dict)
+                or any(not isinstance(audio.get(field), str) for field in (
+                    "path", "text", "source", "source_url", "license", "attribution"
+                ))
+            ):
+                raise ProjectError(f"{card['id']}: данные аудио повреждены.")
             if not isinstance(card.get("included"), bool):
                 raise ProjectError(f"{card['id']}: некорректный флаг включения.")
             if not isinstance(card.get("tags"), list) or any(not isinstance(tag, str) for tag in card["tags"]):

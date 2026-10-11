@@ -1,3 +1,4 @@
+from src.audio_sources import AudioDownload
 from src.project_store import ProjectStore
 
 
@@ -33,3 +34,20 @@ def test_projects_are_sorted_by_update_time(tmp_path) -> None:
 
     assert store.list()[0]["id"] == first["id"]
     assert {item["id"] for item in store.list()} == {first["id"], second["id"]}
+
+
+def test_project_stores_audio_file_and_metadata(tmp_path) -> None:
+    store = ProjectStore(tmp_path / "output")
+    project = store.create("Japanese", "1 | recall | Значение? | 女[おんな]")
+
+    store.attach_audio(
+        project["id"],
+        "card_0001",
+        AudioDownload(b"OggSdata", ".ogg", "https://example.test/file", "CC0", "Speaker"),
+        source="Wikimedia Commons",
+    )
+
+    saved = store.load(project["id"])
+    assert saved["cards"][0]["audio_text"] == "女"
+    assert saved["cards"][0]["audio"]["license"] == "CC0"
+    assert (tmp_path / "output" / project["id"] / "media" / "card_0001.ogg").read_bytes() == b"OggSdata"
