@@ -254,6 +254,15 @@ def find_audio(request: Request, project_id: str, csrf: Annotated[str, Form()]):
     return RedirectResponse(f"/projects/{project_id}?{query}", 303)
 
 
+@router.get("/projects/{project_id}/cards/{card_id}/audio")
+def preview_audio(request: Request, project_id: str, card_id: str):
+    try:
+        path = request.app.state.projects.audio_path(project_id, card_id)
+    except ProjectError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return FileResponse(path)
+
+
 @router.post("/projects/{project_id}/cards/{card_id}/move")
 def move_card(
     request: Request,

@@ -78,6 +78,12 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
     page = client.get(project_url)
     assert "Wikimedia Commons" in page.text
     assert "CC0" in page.text
+    assert "<audio" in page.text
+
+    preview = client.get(f"{project_url}/cards/card_0001/audio")
+    assert preview.status_code == 200
+    assert preview.content == b"OggS"
+    assert preview.headers["content-type"] == "audio/ogg"
 
     uploaded = client.post(
         f"{project_url}/cards/card_0001",
@@ -100,3 +106,21 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
     card = client.app.state.projects.load(project_id)["cards"][0]
     assert card["audio"]["source"] == "Загружено вручную"
     assert card["audio"]["path"].endswith(".mp3")
+
+
+def test_audio_preview_returns_not_found_without_recording(tmp_path) -> None:
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+    created = client.post(
+        "/projects",
+        data={
+            "csrf": token,
+            "project_name": "No audio",
+            "cards_text": "1 | recall | Question? | Answer",
+        },
+        follow_redirects=False,
+    )
+
+    preview = client.get(f"{created.headers['location']}/cards/card_0001/audio")
+
+    assert preview.status_code == 404

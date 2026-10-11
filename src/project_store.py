@@ -182,6 +182,18 @@ class ProjectStore:
         }
         self.save(project)
 
+    def audio_path(self, project_id: str, card_id: str) -> Path:
+        project = self.load(project_id)
+        card = self._card(project, card_id)
+        audio = card.get("audio")
+        if not isinstance(audio, dict) or not audio.get("path"):
+            raise ProjectError("Аудиозапись не найдена.")
+        media_directory = (self._path(project_id).parent / "media").resolve()
+        path = (self._path(project_id).parent / audio["path"]).resolve()
+        if not path.is_relative_to(media_directory) or not path.is_file():
+            raise ProjectError("Аудиозапись не найдена.")
+        return path
+
     def _path(self, project_id: str) -> Path:
         if not PROJECT_ID.fullmatch(project_id):
             raise ProjectError("Некорректный идентификатор проекта.")

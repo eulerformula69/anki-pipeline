@@ -46,6 +46,7 @@
         {% if card.audio.source_url %}<a href="{{ card.audio.source_url }}" target="_blank" rel="noopener">{{ card.audio.source }}</a>{% else %}{{ card.audio.source }}{% endif %}
         {% if card.audio.license %} · {{ card.audio.license }}{% endif %}
       </p>
+      <audio class="audio-preview" controls preload="none" src="/projects/{{ project.id }}/cards/{{ card.id }}/audio">Ваш браузер не поддерживает аудио.</audio>
       {% elif card.audio %}
       <p class="audio-status">Текст изменён. Найдите или загрузите запись заново.</p>
       {% elif card.forvo_url %}
