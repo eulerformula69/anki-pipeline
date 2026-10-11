@@ -4,7 +4,7 @@
 <section class="panel toolbar">
   <div><p class="eyebrow">ПРОВЕРКА</p><h1>{{ project.name }}</h1><p>{{ included }} из {{ project.cards|length }} карточек войдут в колоду.</p></div>
   <div class="toolbar-actions">
-    <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Найти аудио</button></form>
+    <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Найти аудио носителей</button></form>
     <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">+ Карточка</button></form>
   </div>
 </section>
@@ -40,7 +40,8 @@
     <label>Дополнение<textarea name="extra">{{ card.extra }}</textarea></label>
     <div class="audio-editor">
       <label>Текст для поиска аудио<input name="audio_text" value="{{ card.audio_text }}" placeholder="関する"></label>
-      {% if card.audio and card.audio.text == card.audio_text %}
+      <label>Чтение<input name="audio_reading" value="{{ card.audio_reading }}" placeholder="かんする"></label>
+      {% if card.audio and card.audio.text == card.audio_text and card.audio.reading == card.audio_reading %}
       <p class="audio-status">Запись добавлена:
         {% if card.audio.source_url %}<a href="{{ card.audio.source_url }}" target="_blank" rel="noopener">{{ card.audio.source }}</a>{% else %}{{ card.audio.source }}{% endif %}
         {% if card.audio.license %} · {{ card.audio.license }}{% endif %}

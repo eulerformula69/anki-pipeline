@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlencode
@@ -10,7 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from ..audio_sources import AudioDownload, AudioLookupError, find_commons_audio, forvo_search_url
+from ..audio_sources import AudioDownload, AudioLookupError, find_native_audio, forvo_search_url
 from ..anki_export import AnkiExportError, build_anki_deck
 from ..project_store import ProjectError
 
@@ -161,6 +162,7 @@ async def update_card(
     back: Annotated[str, Form()] = "",
     extra: Annotated[str, Form()] = "",
     audio_text: Annotated[str, Form()] = "",
+    audio_reading: Annotated[str, Form()] = "",
     tags: Annotated[str, Form()] = "",
     included: Annotated[bool, Form()] = False,
     audio_file: Annotated[UploadFile | None, File()] = None,
@@ -187,6 +189,7 @@ async def update_card(
                 "back": back,
                 "extra": extra,
                 "audio_text": audio_text,
+                "audio_reading": audio_reading,
                 "tags": parsed_tags,
                 "included": included,
             },
@@ -219,20 +222,29 @@ def find_audio(request: Request, project_id: str, csrf: Annotated[str, Form()]):
         and (
             not card["audio"]
             or card["audio"].get("text", card["audio_text"]) != card["audio_text"]
+            or card["audio"].get("reading", card["audio_reading"]) != card["audio_reading"]
         )
     ]
-    for index, card in enumerate(candidates):
+
+    def lookup(card: dict[str, Any]) -> AudioDownload | AudioLookupError | None:
         try:
-            download = find_commons_audio(card["audio_text"])
-        except AudioLookupError:
-            failed += len(candidates) - index
-            break
+            return find_native_audio(card["audio_text"], card["audio_reading"])
+        except AudioLookupError as exc:
+            return exc
+
+    workers = min(4, len(candidates)) or 1
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        downloads = list(executor.map(lookup, candidates))
+    for card, download in zip(candidates, downloads, strict=True):
+        if isinstance(download, AudioLookupError):
+            failed += 1
+            continue
         if download is None:
             missing += 1
             continue
         try:
             request.app.state.projects.attach_audio(
-                project_id, card["id"], download, source="Wikimedia Commons"
+                project_id, card["id"], download, source=download.source_name
             )
         except ProjectError:
             failed += 1

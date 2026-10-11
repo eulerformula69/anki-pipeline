@@ -149,6 +149,8 @@ def build_anki_deck(
             isinstance(audio, dict)
             and audio.get("path")
             and audio.get("text", card.get("audio_text", "")) == card.get("audio_text", "")
+            and audio.get("reading", card.get("audio_reading", ""))
+            == card.get("audio_reading", "")
         ):
             relative = Path(audio["path"])
             source = (destination.parent / relative).resolve()

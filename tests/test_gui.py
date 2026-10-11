@@ -25,8 +25,9 @@ def test_full_card_flow(tmp_path, monkeypatch) -> None:
     page = client.get(created.headers["location"])
     assert "Question?" in page.text
     assert "Создать `.apkg`" in page.text
-    assert "Найти аудио" in page.text
+    assert "Найти аудио носителей" in page.text
     assert 'name="audio_text"' in page.text
+    assert 'name="audio_reading"' in page.text
 
 
 def test_create_requires_exactly_one_card_input(tmp_path) -> None:
@@ -65,8 +66,10 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
     )
     project_url = created.headers["location"]
     monkeypatch.setattr(
-        "src.gui.routes.find_commons_audio",
-        lambda value: AudioDownload(b"OggS", ".ogg", "https://example.test", "CC0", "Speaker"),
+        "src.gui.routes.find_native_audio",
+        lambda value, reading: AudioDownload(
+            b"OggS", ".ogg", "https://example.test", "CC0", "Speaker"
+        ),
     )
 
     found = client.post(f"{project_url}/audio/find", data={"csrf": token}, follow_redirects=False)
@@ -84,6 +87,7 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
             "back": "寿司[すし]",
             "extra": "",
             "audio_text": "寿司",
+            "audio_reading": "すし",
             "tags": "japanese",
             "included": "true",
         },

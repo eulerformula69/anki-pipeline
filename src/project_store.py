@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .card_input import CardInputError, parse_llm_response, to_project_cards
-from .audio_sources import AudioDownload, infer_audio_text
+from .audio_sources import AudioDownload, infer_audio_reading, infer_audio_text
 
 
 PROJECT_ID = re.compile(r"^[A-Za-z0-9А-Яа-яЁё_-]{1,80}$")
@@ -110,6 +110,10 @@ class ProjectStore:
         if not isinstance(audio_text, str):
             raise ProjectError("Текст для аудио должен быть строкой.")
         card["audio_text"] = audio_text.strip()
+        audio_reading = updates.get("audio_reading", card.get("audio_reading", ""))
+        if not isinstance(audio_reading, str):
+            raise ProjectError("Чтение для аудио должно быть строкой.")
+        card["audio_reading"] = audio_reading.strip()
         tags = updates.get("tags")
         if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
             raise ProjectError("Теги должны быть списком строк.")
@@ -129,6 +133,7 @@ class ProjectStore:
             "back": "",
             "extra": "",
             "audio_text": "",
+            "audio_reading": "",
             "audio": None,
             "tags": ["manual"],
             "included": True,
@@ -169,6 +174,7 @@ class ProjectStore:
         card["audio"] = {
             "path": f"media/{destination.name}",
             "text": card["audio_text"],
+            "reading": card["audio_reading"],
             "source": source,
             "source_url": download.source_url,
             "license": download.license_name,
@@ -200,9 +206,16 @@ class ProjectStore:
                         "audio_text",
                         infer_audio_text(str(card.get("front", "")), str(card.get("back", ""))),
                     )
+                    card.setdefault(
+                        "audio_reading",
+                        infer_audio_reading(
+                            str(card.get("front", "")), str(card.get("back", ""))
+                        ),
+                    )
                     card.setdefault("audio", None)
                     if isinstance(card["audio"], dict):
                         card["audio"].setdefault("text", card["audio_text"])
+                        card["audio"].setdefault("reading", card["audio_reading"])
         self._validate(value)
         return deepcopy(value)
 
@@ -228,11 +241,13 @@ class ProjectStore:
                 raise ProjectError(f"{card['id']}: текстовые поля повреждены.")
             if not isinstance(card.get("audio_text"), str):
                 raise ProjectError(f"{card['id']}: текст для аудио повреждён.")
+            if not isinstance(card.get("audio_reading"), str):
+                raise ProjectError(f"{card['id']}: чтение для аудио повреждено.")
             audio = card.get("audio")
             if audio is not None and (
                 not isinstance(audio, dict)
                 or any(not isinstance(audio.get(field), str) for field in (
-                    "path", "text", "source", "source_url", "license", "attribution"
+                    "path", "text", "reading", "source", "source_url", "license", "attribution"
                 ))
             ):
                 raise ProjectError(f"{card['id']}: данные аудио повреждены.")

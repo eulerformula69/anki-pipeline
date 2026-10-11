@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import re
@@ -12,6 +13,8 @@ from urllib.request import Request, urlopen
 
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+JPOD101_AUDIO = "https://assets.languagepod101.com/dictionary/japanese/audiomp3.php"
+JPOD101_MISSING_MD5 = "7e2c2f954ef6051373ba916f000168dc"
 USER_AGENT = "anki-pipeline/1.0 (personal language-learning tool)"
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 JAPANESE_CHARS = r"\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff々〆ヵヶ"
@@ -35,10 +38,17 @@ class AudioDownload:
     source_url: str
     license_name: str
     attribution: str
+    source_name: str = "Wikimedia Commons"
 
 
 def strip_furigana(value: str) -> str:
     result = FURIGANA.sub(lambda match: match.group("base"), value)
+    result = re.sub(rf"(?<=[{JAPANESE_CHARS}])\s+(?=[{JAPANESE_CHARS}])", "", result)
+    return result.strip()
+
+
+def furigana_reading(value: str) -> str:
+    result = FURIGANA.sub(lambda match: match.group("reading"), value)
     result = re.sub(rf"(?<=[{JAPANESE_CHARS}])\s+(?=[{JAPANESE_CHARS}])", "", result)
     return result.strip()
 
@@ -52,8 +62,57 @@ def infer_audio_text(front: str, back: str) -> str:
     return ""
 
 
+def infer_audio_reading(front: str, back: str) -> str:
+    for field in (back, front):
+        reading = furigana_reading(field)
+        matches = [match.group(0).strip() for match in JAPANESE_RUN.finditer(reading)]
+        if matches:
+            return max(matches, key=lambda item: len(re.findall(rf"[{JAPANESE_CHARS}]", item)))
+    return ""
+
+
 def forvo_search_url(value: str) -> str:
     return f"https://forvo.com/word/{quote(value, safe='')}/#ja"
+
+
+def find_native_audio(value: str, reading: str) -> AudioDownload | None:
+    jpod101_error = None
+    try:
+        jpod101 = find_jpod101_audio(value, reading)
+    except AudioLookupError as exc:
+        jpod101 = None
+        jpod101_error = exc
+    if jpod101 is not None:
+        return jpod101
+    japanese_length = len(re.findall(rf"[{JAPANESE_CHARS}]", value))
+    if japanese_length > 8:
+        return None
+    try:
+        return find_commons_audio(value)
+    except AudioLookupError:
+        if jpod101_error is not None:
+            raise jpod101_error
+        return None
+
+
+def find_jpod101_audio(value: str, reading: str) -> AudioDownload | None:
+    target = strip_furigana(value)
+    clean_reading = furigana_reading(reading)
+    if not target or not clean_reading or len(target) > 40:
+        return None
+    url = f"{JPOD101_AUDIO}?{urlencode({'kanji': target, 'kana': clean_reading})}"
+    data = _request_bytes(url)
+    digest = hashlib.md5(data, usedforsecurity=False).hexdigest()
+    if digest == JPOD101_MISSING_MD5:
+        return None
+    return AudioDownload(
+        data,
+        ".mp3",
+        "https://www.japanesepod101.com/japanese-dictionary/",
+        "",
+        "JapanesePod101",
+        "JapanesePod101",
+    )
 
 
 def find_commons_audio(value: str) -> AudioDownload | None:

@@ -93,6 +93,7 @@ def test_export_packages_attached_audio(tmp_path, fake_genanki) -> None:
     value["cards"][0]["audio"] = {
         "path": "media/card_0001.mp3",
         "text": "",
+        "reading": "",
         "source": "manual",
         "source_url": "",
         "license": "personal",

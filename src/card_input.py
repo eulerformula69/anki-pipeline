@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .audio_sources import infer_audio_text
+from .audio_sources import infer_audio_reading, infer_audio_text
 
 
 CARD_TYPES = {"recall", "application", "discrimination", "cloze"}
@@ -61,6 +61,7 @@ def to_project_cards(parsed: list[ParsedCard], *, start: int = 1) -> list[dict[s
             "back": card.back,
             "extra": "",
             "audio_text": infer_audio_text(card.front, card.back),
+            "audio_reading": infer_audio_reading(card.front, card.back),
             "audio": None,
             "tags": [SOURCE_TAG, card.card_type],
             "included": True,

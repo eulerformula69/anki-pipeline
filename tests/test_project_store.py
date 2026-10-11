@@ -49,5 +49,6 @@ def test_project_stores_audio_file_and_metadata(tmp_path) -> None:
 
     saved = store.load(project["id"])
     assert saved["cards"][0]["audio_text"] == "女"
+    assert saved["cards"][0]["audio_reading"] == "おんな"
     assert saved["cards"][0]["audio"]["license"] == "CC0"
     assert (tmp_path / "output" / project["id"] / "media" / "card_0001.ogg").read_bytes() == b"OggSdata"
