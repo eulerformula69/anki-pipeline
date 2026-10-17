@@ -134,6 +134,44 @@ def packaged_card_count(path: Path) -> int:
         raise AnkiExportError(f"Не удалось проверить колоду: {exc}") from exc
 
 
+def prepare_card(project: dict[str, Any], card: dict[str, Any], project_directory: Path,
+                 global_tags: list[str]) -> tuple[list[str], list[str], list[tuple[str, Path]]]:
+    media: list[tuple[str, Path]] = []
+    tags = [
+        re.sub(r"\s+", "_", tag.strip())
+        for tag in dict.fromkeys([*card["tags"], *global_tags])
+        if tag.strip()
+    ]
+    audio_field = ""
+    audio = card.get("audio")
+    if (
+        isinstance(audio, dict)
+        and audio.get("path")
+        and audio.get("text", card.get("audio_text", ""))
+        == card.get("audio_text", "")
+        and audio.get("reading", card.get("audio_reading", ""))
+        == card.get("audio_reading", "")
+    ):
+        relative = Path(audio["path"])
+        source = (project_directory / relative).resolve()
+        if relative.is_absolute() or ".." in relative.parts:
+            raise AnkiExportError(f"Некорректный путь аудио у {card['id']}.")
+        if not source.is_relative_to(project_directory.resolve()) or not source.is_file():
+            raise AnkiExportError(f"Не найден аудиофайл карточки {card['id']}.")
+        media_name = _media_filename(project, card, source)
+        media.append((media_name, source))
+        audio_field = f"[sound:{media_name}]"
+    fields = [
+        _anki_html_text(card["front"]),
+        _anki_html_text(card["back"]),
+        _anki_html_text(card["extra"]),
+        card["type"],
+        project["name"],
+        audio_field,
+    ]
+    return fields, tags, media
+
+
 def build_anki_deck(
     project: dict[str, Any], destination: Path, *, deck_name: str, global_tags: list[str]
 ) -> Path:
@@ -158,40 +196,11 @@ def build_anki_deck(
             model = _model(genanki)
             media_files: list[str] = []
             for card in cards:
-                tags = [
-                    re.sub(r"\s+", "_", tag.strip())
-                    for tag in dict.fromkeys([*card["tags"], *global_tags])
-                    if tag.strip()
-                ]
-                audio_field = ""
-                audio = card.get("audio")
-                if (
-                    isinstance(audio, dict)
-                    and audio.get("path")
-                    and audio.get("text", card.get("audio_text", ""))
-                    == card.get("audio_text", "")
-                    and audio.get("reading", card.get("audio_reading", ""))
-                    == card.get("audio_reading", "")
-                ):
-                    relative = Path(audio["path"])
-                    source = (destination.parent / relative).resolve()
-                    if relative.is_absolute() or ".." in relative.parts:
-                        raise AnkiExportError(f"Некорректный путь аудио у {card['id']}.")
-                    if not source.is_relative_to(destination.parent.resolve()) or not source.is_file():
-                        raise AnkiExportError(f"Не найден аудиофайл карточки {card['id']}.")
-                    media_name = _media_filename(project, card, source)
+                fields, tags, media = prepare_card(project, card, destination.parent, global_tags)
+                for media_name, source in media:
                     packaged_source = Path(directory) / media_name
                     shutil.copyfile(source, packaged_source)
                     media_files.append(str(packaged_source))
-                    audio_field = f"[sound:{media_name}]"
-                fields = [
-                    _anki_html_text(card["front"]),
-                    _anki_html_text(card["back"]),
-                    _anki_html_text(card["extra"]),
-                    card["type"],
-                    project["name"],
-                    audio_field,
-                ]
                 deck.add_note(
                     _note(genanki, stable_guid(project_id, card["id"]), model, fields, tags)
                 )

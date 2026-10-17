@@ -1,7 +1,14 @@
 document.addEventListener("submit", async (event) => {
   const form = event.target.closest("[data-async-page] form");
-  if (!form || form.dataset.submitting === "1") return;
+  if (form?.matches("[data-connect-settings]")) return;
+  if (form?.matches("[data-export-form]") && document.querySelector('[data-unsaved="1"]')) {
+    event.preventDefault();
+    alert("Сначала сохраните изменённые карточки, затем повторите экспорт.");
+    return;
+  }
+  if (!form) return;
   event.preventDefault();
+  if (form.dataset.submitting === "1") return;
 
   const submitter = event.submitter;
   const cardId = form.closest(".review-card")?.id;
@@ -32,14 +39,8 @@ document.addEventListener("submit", async (event) => {
   } catch (error) {
     if (submitter?.dataset.busyLabel) submitter.textContent = originalLabel;
     form.dataset.submitting = "0";
-    if (submitter?.name) {
-      const field = document.createElement("input");
-      field.type = "hidden";
-      field.name = submitter.name;
-      field.value = submitter.value;
-      form.append(field);
-    }
-    form.submit();
+    form.removeAttribute("aria-busy");
+    alert("Не удалось получить ответ. Проверьте результат перед повторной отправкой.");
   } finally {
     document.body.classList.remove("page-busy");
   }

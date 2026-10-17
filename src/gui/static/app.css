@@ -10,6 +10,10 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.export-modes { display: flex; gap: .5rem; margin-bottom: 1.25rem; }
+.export-modes [aria-pressed="true"] { background: var(--green); color: white; }
+.export select { width: 100%; padding: .8rem; font: inherit; border: 1px solid var(--line); border-radius: .6rem; }
 body { margin: 0; color: var(--ink); background: var(--bg); font-family: Inter, system-ui, sans-serif; line-height: 1.5; }
 header { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem clamp(1rem, 4vw, 3rem); background: var(--ink); color: white; }
 header a { color: white; font-weight: 800; text-decoration: none; }
@@ -64,6 +68,7 @@ body.page-busy [data-async-page] { pointer-events: none; }
 .check input { width: auto; }
 .export { display: grid; gap: 1rem; margin-top: 1rem; }
 .export form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end; }
+.export [data-export-panel="connect"] form { grid-template-columns: 1fr; margin: 1rem 0; }
 .download { justify-self: start; color: var(--green); }
 .error { max-width: 680px; margin: 2rem auto; }
 

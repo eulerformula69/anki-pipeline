@@ -123,6 +123,8 @@ def review(request: Request, project_id: str) -> HTMLResponse:
             "audio_failed": request.query_params.get("audio_failed"),
             "audio_uploaded": request.query_params.get("audio_uploaded"),
             "deck_created": request.query_params.get("exported"),
+            "anki_added": request.query_params.get("anki_added"),
+            "anki_updated": request.query_params.get("anki_updated"),
         },
     )
 

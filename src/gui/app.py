@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..project_store import ProjectStore
 from .routes import router
+from .connect_routes import router as connect_router
 
 
 def create_app(root: Path | None = None) -> FastAPI:
@@ -16,4 +17,5 @@ def create_app(root: Path | None = None) -> FastAPI:
     app.state.projects = ProjectStore(project_root / "output")
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
     app.include_router(router)
+    app.include_router(connect_router)
     return app
