@@ -1,5 +1,23 @@
 from src.audio_sources import AudioDownload
 from src.project_store import ProjectStore
+import pytest
+from src.project_store import ProjectError
+
+
+def test_delete_preserves_other_cards_and_never_reuses_ids(tmp_path):
+    store = ProjectStore(tmp_path)
+    project_id = store.create("Delete", "1 | recall | Q | A\n2 | recall | Q2 | A2")["id"]
+    original = store.load(project_id)["cards"][1]
+    store.delete_card(project_id, "card_0001")
+    assert store.load(project_id)["cards"] == [original]
+    store.append(project_id, "3 | recall | Q3 | A3")
+    assert store.load(project_id)["cards"][-1]["id"] == "card_0003"
+    store.delete_card(project_id, "card_0003")
+    store.delete_card(project_id, "card_0002")
+    assert store.load(project_id)["cards"] == []
+    assert store.add_card(project_id) == "card_0004"
+    with pytest.raises(ProjectError, match="Карточка не найдена"):
+        store.delete_card(project_id, "card_0001")
 
 
 def test_project_lifecycle_uses_one_json_file(tmp_path) -> None:

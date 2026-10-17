@@ -67,7 +67,13 @@
     <label>Теги<input name="tags" value="{{ card.tags|join(', ') }}"></label>
     <button data-busy-label="Сохраняем…">Сохранить карточку</button>
   </form>
+  <form class="delete-card" method="post" action="/projects/{{ project.id }}/cards/{{ card.id }}/delete" data-confirm="Удалить карточку {{ card.id }} из проекта? Это действие нельзя отменить. Карточка в Anki и ранее созданный файл .apkg сохранятся.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="danger" data-busy-label="Удаляем…">Удалить карточку</button>
+  </form>
 </article>
+{% else %}
+<p class="notice">Карточек пока нет. Нажмите «+ Карточка» или добавьте ответ LLM.</p>
 {% endfor %}
 </div>
 

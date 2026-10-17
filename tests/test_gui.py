@@ -9,6 +9,24 @@ from src.audio_sources import AudioDownload, AudioLookupError
 from src.gui.app import create_app
 
 
+def test_delete_card_requires_csrf_and_supports_empty_project(tmp_path):
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+    project_id = client.app.state.projects.create("Delete", "1 | recall | Q | A")["id"]
+    url = f"/projects/{project_id}"
+    page = client.get(url)
+    assert "Удалить карточку" in page.text
+    assert "data-confirm=" in page.text
+    endpoint = f"{url}/cards/card_0001/delete"
+    assert client.post(endpoint, data={"csrf": "wrong"}).status_code == 403
+    assert len(client.app.state.projects.load(project_id)["cards"]) == 1
+    response = client.post(endpoint, data={"csrf": token})
+    assert response.status_code == 200
+    assert "Карточек пока нет" in response.text
+    assert 'id="card_0001"' not in response.text
+    assert client.post(endpoint, data={"csrf": token}).status_code == 422
+
+
 @pytest.mark.parametrize("failure", [False, True])
 def test_add_audio_for_one_card_saves_edits_and_leaves_other_cards(tmp_path, monkeypatch, failure):
     client = TestClient(create_app(root=tmp_path))

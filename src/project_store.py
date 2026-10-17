@@ -99,7 +99,7 @@ class ProjectStore:
             parsed = parse_llm_response(text)
         except CardInputError as exc:
             raise ProjectError(str(exc)) from exc
-        project["cards"].extend(to_project_cards(parsed, start=len(project["cards"]) + 1))
+        project["cards"].extend(to_project_cards(parsed, start=self._next_card_number(project)))
         self.save(project)
         return project
 
@@ -128,7 +128,7 @@ class ProjectStore:
 
     def add_card(self, project_id: str) -> str:
         project = self.load(project_id)
-        position = max((int(card["id"].split("_")[1]) for card in project["cards"]), default=0) + 1
+        position = self._next_card_number(project)
         card_id = f"card_{position:04d}"
         project["cards"].append({
             "id": card_id,
@@ -145,6 +145,20 @@ class ProjectStore:
         })
         self.save(project)
         return card_id
+
+    @staticmethod
+    def _next_card_number(project: dict[str, Any]) -> int:
+        return max(
+            project.get("next_card_number", 1),
+            max((int(card["id"].split("_")[1]) for card in project["cards"]), default=0) + 1,
+        )
+
+    def delete_card(self, project_id: str, card_id: str) -> None:
+        project = self.load(project_id)
+        card = self._card(project, card_id)
+        project["next_card_number"] = self._next_card_number(project)
+        project["cards"].remove(card)
+        self.save(project)
 
     def move_card(self, project_id: str, card_id: str, direction: str) -> None:
         project = self.load(project_id)
@@ -245,7 +259,7 @@ class ProjectStore:
         if not isinstance(project.get("name"), str) or not project["name"].strip():
             raise ProjectError("У проекта нет названия.")
         cards = project.get("cards")
-        if not isinstance(cards, list) or not cards:
+        if not isinstance(cards, list):
             raise ProjectError("Проект не содержит карточек.")
         ids = []
         for card in cards:

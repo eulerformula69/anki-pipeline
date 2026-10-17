@@ -54,6 +54,9 @@ button:disabled { cursor: default; opacity: .35; }
 .order { display: grid; align-content: start; gap: .35rem; }
 .order button { min-height: 2.3rem; padding: .25rem .55rem; }
 .editor { display: grid; gap: .85rem; }
+.delete-card { grid-column: -2 / -1; }
+button.danger { color: #a12b24; border-color: #dba9a5; }
+button.danger:hover { background: #fff1ef; border-color: #a12b24; }
 .audio-editor { display: grid; gap: .7rem; padding: .9rem; border: 1px solid var(--line); border-radius: .7rem; background: #f7faf7; }
 .audio-status { margin: 0; color: var(--muted); font-size: .9rem; }
 .audio-status a { color: var(--green); font-weight: 750; }

@@ -9,6 +9,7 @@ document.addEventListener("submit", async (event) => {
   if (!form) return;
   event.preventDefault();
   if (form.dataset.submitting === "1") return;
+  if (form.dataset.confirm && !confirm(form.dataset.confirm)) return;
 
   const submitter = event.submitter;
   const cardId = form.closest(".review-card")?.id;

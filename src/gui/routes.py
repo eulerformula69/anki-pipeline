@@ -283,6 +283,21 @@ def preview_audio(request: Request, project_id: str, card_id: str):
     return FileResponse(path)
 
 
+@router.post("/projects/{project_id}/cards/{card_id}/delete")
+def delete_card(
+    request: Request,
+    project_id: str,
+    card_id: str,
+    csrf: Annotated[str, Form()],
+):
+    _check_csrf(request, csrf)
+    try:
+        request.app.state.projects.delete_card(project_id, card_id)
+    except ProjectError as exc:
+        return _error(request, str(exc))
+    return RedirectResponse(f"/projects/{project_id}", 303)
+
+
 @router.post("/projects/{project_id}/cards/{card_id}/move")
 def move_card(
     request: Request,
