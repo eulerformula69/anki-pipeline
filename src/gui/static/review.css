@@ -1,0 +1,52 @@
+/* A focused reading column keeps each card within a comfortable line length. */
+.review-page { max-width: 760px; margin-inline: auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.review-page .panel { padding: 1.25rem; box-shadow: none; border-color: var(--line); }
+.review-page .toolbar { flex-wrap: wrap; align-items: center; background: transparent; border: 0; padding: 0; margin-bottom: 1.25rem; }
+.review-page .toolbar h1 { font-size: clamp(1.35rem, 3vw, 1.8rem); letter-spacing: -.035em; overflow-wrap: anywhere; }
+.review-page .eyebrow { margin-bottom: .5rem; }
+.review-page .toolbar p:last-child, .review-hint { font-size: .875rem; color: var(--muted); }
+.review-page .toolbar-actions { flex-wrap: wrap; }
+.review-page .add-cards { padding: .85rem 1.1rem; }
+.review-page .add-cards summary { font-size: .875rem; font-weight: 600; }
+.review-page .cards { gap: 1.5rem; }
+.review-page .review-card { position: relative; display: block; padding: 1.25rem; background: #fff; box-shadow: 0 3px 15px rgba(25,48,33,.035); scroll-margin-top: 1rem; }
+.review-page .editor { gap: 1rem; min-width: 0; }
+.review-page .card-head { flex-wrap: wrap; gap: .5rem; padding-bottom: .8rem; border-bottom: 1px solid var(--line); padding-right: 5.5rem; }
+.review-page .card-head strong { font-size: .9rem; font-weight: 650; }
+.review-page .card-head strong small { font-size: .8rem; margin-left: .2rem; }
+.review-page .card-head span { font-size: .6rem; letter-spacing: .025em; }
+.review-page .check { margin-left: 0; font-size: .8rem; font-weight: 500; min-height: 2rem; }
+.review-page .check input { accent-color: var(--green); width: 1rem; height: 1rem; }
+.review-page .order { position: absolute; right: 1rem; top: 1rem; display: flex; gap: .25rem; }
+.review-page .order button { width: 2.5rem; min-height: 2.5rem; }
+.review-page label { font-size: .8rem; font-weight: 600; gap: .35rem; }
+.review-page input, .review-page textarea { font-size: 1rem; font-weight: 400; line-height: 1.55; border-color: var(--line); border-radius: .6rem; padding: .65rem .75rem; }
+.review-page textarea { min-height: 3rem; resize: vertical; }
+.review-page textarea[name="front"], .review-page textarea[name="back"] { min-height: 4.5rem; }
+.review-page textarea[name="back"] { font-size: 1.1rem; }
+.review-page textarea:focus, .review-page input:focus { border-color: var(--green); outline: 3px solid #256a481c; }
+.review-page button { font-size: .85rem; font-weight: 600; }
+.review-page button:active:not(:disabled) { transform: scale(.97); }
+.review-page :focus-visible { outline: 3px solid #256a4870; outline-offset: 3px; }
+.card-options { border-block: 1px solid var(--line); padding-block: .8rem; }
+.card-options summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
+.card-options summary small { float: right; font-size: .75rem; }
+.card-options .audio-editor { margin-block: .9rem; background: #f7f9f7; }
+.card-save { display: flex; justify-content: space-between; gap: .75rem; align-items: center; flex-wrap: wrap; }
+.save-status { font-size: .75rem; color: var(--muted); }
+.editor[data-unsaved="1"] .save-status { color: #8b590c; }
+.review-page .delete-card { margin-top: .75rem; }
+.review-page button.danger { min-height: 2.5rem; padding: .35rem .5rem; background: transparent; border-color: transparent; font-size: .75rem; }
+.review-page .export form { grid-template-columns: 1fr; }
+@media (max-width: 480px) {
+  .review-page .review-card { padding: 1rem; }
+  .review-page .card-head { align-items: flex-start; }
+  .review-page .card-head strong { flex-basis: 100%; }
+  .card-save button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-page button:active:not(:disabled) { transform: none; }
+}
+@media (prefers-contrast: more) {
+  .review-page input, .review-page textarea, .review-page .review-card { border-color: var(--muted); }
+}

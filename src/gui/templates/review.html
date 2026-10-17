@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} · anki-pipeline{% endblock %}
+{% block styles %}<link rel="stylesheet" href="/static/review.css?v=1">{% endblock %}
 {% block content %}
-<div data-async-page>
+<div data-async-page class="review-page">
 <section class="panel toolbar">
   <div><p class="eyebrow">ПРОВЕРКА</p><h1>{{ project.name }}</h1><p>{{ included }} из {{ project.cards|length }} карточек войдут в колоду.</p></div>
   <div class="toolbar-actions">
@@ -9,7 +10,7 @@
     <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary" data-busy-label="Добавляем…">+ Карточка</button></form>
   </div>
 </section>
-<p>Сначала ищем записи носителей. Если записи нет, создаём бесплатную озвучку голосом Nanami. Нужен интернет. Сохраните изменения карточек перед добавлением аудио.</p>
+<p class="review-hint">Сначала ищем записи носителей. Если записи нет, создаём бесплатную озвучку голосом Nanami. Нужен интернет. Сохраните изменения карточек перед добавлением аудио.</p>
 
 {% if audio_found is not none %}
 <p class="notice">Добавлено аудио: {{ audio_found }}. Без аудио: {{ audio_missing }}. Ошибок: {{ audio_failed }}. При ошибке проверьте интернет и повторите попытку.</p>
@@ -34,15 +35,17 @@
 <article class="review-card {% if not card.included %}excluded{% endif %}" id="{{ card.id }}">
   <form class="order" method="post" action="/projects/{{ project.id }}/cards/{{ card.id }}/move">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button name="direction" value="up" {% if loop.first %}disabled{% endif %}>↑</button>
-    <button name="direction" value="down" {% if loop.last %}disabled{% endif %}>↓</button>
+    <button aria-label="Переместить карточку выше" name="direction" value="up" {% if loop.first %}disabled{% endif %}>↑</button>
+    <button aria-label="Переместить карточку ниже" name="direction" value="down" {% if loop.last %}disabled{% endif %}>↓</button>
   </form>
   <form class="editor" method="post" enctype="multipart/form-data" action="/projects/{{ project.id }}/cards/{{ card.id }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <div class="card-head"><strong>{{ card.id }}</strong><span>{{ card.type }}</span><label class="check"><input type="checkbox" name="included" value="true" {% if card.included %}checked{% endif %}> Включить</label></div>
-    <label>Вопрос<textarea name="front" required>{{ card.front }}</textarea></label>
-    <label>Ответ<textarea name="back" required>{{ card.back }}</textarea></label>
-    <label>Дополнение<textarea name="extra">{{ card.extra }}</textarea></label>
+    <div class="card-head"><strong title="{{ card.id }}">Карточка {{ loop.index }} <small>из {{ loop.length }}</small></strong><span>{{ card.type }}</span><label class="check"><input type="checkbox" name="included" value="true" {% if card.included %}checked{% endif %}> Включить</label></div>
+    <label>Вопрос<textarea rows="2" name="front" required>{{ card.front }}</textarea></label>
+    <label>Ответ<textarea rows="2" name="back" required>{{ card.back }}</textarea></label>
+    <label>Дополнение<textarea rows="1" name="extra">{{ card.extra }}</textarea></label>
+    <details class="card-options">
+      <summary>Аудио и теги <small>{{ "Есть запись" if card.audio else "Без записи" }}</small></summary>
     <div class="audio-editor">
       <label>Текст для аудио<input name="audio_text" value="{{ card.audio_text }}" placeholder="関する"></label>
       <label>Чтение<input name="audio_reading" value="{{ card.audio_reading }}" placeholder="かんする"></label>
@@ -65,7 +68,8 @@
       </label>
     </div>
     <label>Теги<input name="tags" value="{{ card.tags|join(', ') }}"></label>
-    <button data-busy-label="Сохраняем…">Сохранить карточку</button>
+    </details>
+    <div class="card-save"><span class="save-status" role="status" aria-live="polite">Все изменения сохранены</span><button class="primary" data-busy-label="Сохраняем…">Сохранить карточку</button></div>
   </form>
   <form class="delete-card" method="post" action="/projects/{{ project.id }}/cards/{{ card.id }}/delete" data-confirm="Удалить карточку {{ card.id }} из проекта? Это действие нельзя отменить. Карточка в Anki и ранее созданный файл .apkg сохранятся.">
     <input type="hidden" name="csrf" value="{{ csrf }}">

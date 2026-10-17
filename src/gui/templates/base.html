@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}anki-pipeline{% endblock %}</title>
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/app.js?v=5" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=2">
+  {% block styles %}{% endblock %}
+  <script src="/static/app.js?v=6" defer></script>
   <script src="/static/anki-connect.js?v=1" defer></script>
 </head>
 <body>

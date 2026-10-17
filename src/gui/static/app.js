@@ -34,6 +34,7 @@ document.addEventListener("submit", async (event) => {
     const nextMain = nextDocument.querySelector("main");
     if (!nextMain) throw new Error("Response does not contain the page content");
     document.querySelector("main").replaceWith(nextMain);
+    fitCardFields();
     document.title = nextDocument.title;
     history.replaceState(null, "", response.url);
     if (cardId) document.getElementById(cardId)?.scrollIntoView({ block: "nearest" });
@@ -46,3 +47,21 @@ document.addEventListener("submit", async (event) => {
     document.body.classList.remove("page-busy");
   }
 });
+
+function fitCardFields(root = document) {
+  root.querySelectorAll('.review-card textarea').forEach((field) => {
+    if (!field.getClientRects().length) return;
+    field.style.height = 'auto';
+    field.style.height = `${field.scrollHeight + 2}px`;
+  });
+}
+
+document.addEventListener('input', (event) => {
+  const editor = event.target.closest('.editor');
+  if (!editor) return;
+  editor.dataset.unsaved = '1';
+  editor.querySelector('.save-status').textContent = 'Есть несохранённые изменения';
+  if (event.target.matches('textarea')) fitCardFields(editor);
+});
+window.addEventListener('resize', () => fitCardFields());
+fitCardFields();
