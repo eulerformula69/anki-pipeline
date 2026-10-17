@@ -10,6 +10,7 @@ import httpx
 
 from .anki_export import FIELD_NAMES, MODEL_NAME, _model, prepare_card, stable_guid
 from .anki_matching import NoteMatchError, find_import_targets
+from .anki_tags import TAG_PREFIX, system_tag
 
 DEFAULT_URL = "http://127.0.0.1:8765"
 
@@ -105,7 +106,7 @@ class AnkiConnect:
         if any(not card["front"].strip() or not card["back"].strip() for card in cards):
             raise AnkiConnectError("У каждой включённой карточки должны быть вопрос и ответ.")
         prepared = [prepare_card(project, card, directory, tags) for card in cards]
-        identities = [f"anki_pipeline::{stable_guid(project['id'], card['id'])}" for card in cards]
+        identities = [f"{TAG_PREFIX}{stable_guid(project['id'], card['id'])}" for card in cards]
         try:
             targets = find_import_targets(self, project["name"], [
                 (marker, dict(zip(FIELD_NAMES, values, strict=True)))
@@ -127,6 +128,10 @@ class AnkiConnect:
                     note_id = target["noteId"]
                     self.call("updateNoteFields", note={"id": note_id, "fields": fields})
                     self.call("addTags", notes=[note_id], tags=" ".join(note_tags))
+                    obsolete = [tag for tag in target.get("tags", []) if system_tag(tag) != tag]
+                    if obsolete:
+                        self.call("addTags", notes=[note_id], tags=" ".join(system_tag(tag) for tag in obsolete))
+                        self.call("removeTags", notes=[note_id], tags=" ".join(obsolete))
                     self.call("changeDeck", cards=target["cards"], deck=deck_name)
                     updated += 1
                 else:

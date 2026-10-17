@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .anki_export import MODEL_NAME
+from .anki_tags import LEGACY_ID_PREFIX, TAG_PREFIX, identity_tags
 
 
 class NoteMatchError(ValueError):
@@ -24,7 +25,8 @@ def find_import_targets(connection: Any, source: str,
     targets = []
     used = set()
     for marker, fields in prepared:
-        candidates = [note for note in notes if marker in note.get("tags", []) or (
+        markers = identity_tags(marker)
+        candidates = [note for note in notes if markers.intersection(note.get("tags", [])) or (
             field_value(note, "Source") == source
             and field_value(note, "Front") == fields["Front"]
             and field_value(note, "CardType") == fields["CardType"]
@@ -37,7 +39,11 @@ def find_import_targets(connection: Any, source: str,
         target = candidates[0] if candidates else None
         if target:
             foreign_markers = [tag for tag in target.get("tags", [])
-                               if tag.startswith("anki_pipeline::") and tag != marker]
+                               if (tag.startswith(LEGACY_ID_PREFIX) or (
+                                   tag.startswith(TAG_PREFIX)
+                                   and len(tag.removeprefix(TAG_PREFIX)) == 20
+                                   and all(c in "0123456789abcdef" for c in tag.removeprefix(TAG_PREFIX))
+                               )) and tag not in markers]
             if foreign_markers or target["noteId"] in used:
                 raise NoteMatchError(
                     "Карточка совпала с другой карточкой проекта. "

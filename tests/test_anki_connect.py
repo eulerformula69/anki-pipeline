@@ -48,6 +48,9 @@ class FakeAnki(AnkiConnect):
         if action == "addTags":
             for note_id in params["notes"]:
                 self.notes[note_id]["tags"] = list(set(self.notes[note_id]["tags"] + params["tags"].split()))
+        if action == "removeTags":
+            for note_id in params["notes"]:
+                self.notes[note_id]["tags"] = [tag for tag in self.notes[note_id]["tags"] if tag not in params["tags"].split()]
         if action == "updateNoteFields":
             self.notes[params["note"]["id"]]["fields"].update(params["note"]["fields"])
 
@@ -67,7 +70,7 @@ def test_legacy_package_import_updates_original_and_adds_identity(tmp_path):
     assert len(anki.notes) == 1
     assert anki.notes[1]["fields"]["Back"] == "Edited answer"
     assert "existing_user_tag" in anki.notes[1]["tags"]
-    assert any(tag.startswith("anki_pipeline::") for tag in anki.notes[1]["tags"])
+    assert any(tag.startswith("anki-pipeline::") for tag in anki.notes[1]["tags"])
     assert not any(action == "addNote" for action, _ in anki.calls)
 
 
@@ -240,3 +243,30 @@ def test_import_route_and_offline_settings(tmp_path, monkeypatch):
     response = client.post("/anki-connect/settings", data={"csrf": token, "url": "http://localhost:1234"})
     assert response.status_code == 422
     assert load_settings(app.state.projects.root)["url"] == "http://127.0.0.1:8765"
+
+
+def test_old_identity_matches_edited_front_and_migrates_tags(tmp_path):
+    from src.anki_export import stable_guid
+
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
+    anki = FakeAnki()
+    anki.notes[1] = legacy_note(project, project["cards"][0], tmp_path)
+    identity = stable_guid(project["id"], project["cards"][0]["id"])
+    anki.notes[1]["tags"] += ["anki_pipeline::" + identity, "LLM-source", "recall"]
+    project["cards"][0]["front"] = "Changed"
+    project["cards"][0]["tags"].append("my_tag")
+    assert anki.import_project(project, tmp_path, "Default", ["lesson"]) == (0, 1)
+    assert set(anki.notes[1]["tags"]) == {
+        "existing_user_tag", "my_tag", "lesson", "anki-pipeline::" + identity,
+        "anki-pipeline::LLM-source", "anki-pipeline::recall",
+    }
+    assert anki.import_project(project, tmp_path, "Default", []) == (0, 1)
+
+
+def test_system_tags_keep_user_tags_outside_namespace():
+    from src.anki_tags import note_tags
+
+    assert note_tags(["LLM-source", "recall", "manual", "my_tag"], ["lesson", "recall"], "abc") == [
+        "anki-pipeline::LLM-source", "anki-pipeline::recall", "anki-pipeline::manual",
+        "my_tag", "lesson", "recall", "anki-pipeline::abc",
+    ]

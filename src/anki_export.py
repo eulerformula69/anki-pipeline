@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .anki_tags import note_tags
+
 
 MODEL_ID = 1_876_543_220
 MODEL_NAME = "anki-pipeline Basic v3"
@@ -137,14 +139,7 @@ def packaged_card_count(path: Path) -> int:
 def prepare_card(project: dict[str, Any], card: dict[str, Any], project_directory: Path,
                  global_tags: list[str]) -> tuple[list[str], list[str], list[tuple[str, Path]]]:
     media: list[tuple[str, Path]] = []
-    tags = [
-        re.sub(r"\s+", "_", tag.strip())
-        for tag in dict.fromkeys([
-            *card["tags"], *global_tags,
-            f"anki_pipeline::{stable_guid(project['id'], card['id'])}",
-        ])
-        if tag.strip()
-    ]
+    tags = note_tags(card["tags"], global_tags, stable_guid(project['id'], card['id']))
     audio_field = ""
     audio = card.get("audio")
     if (
