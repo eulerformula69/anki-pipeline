@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from src.anki_connect import AnkiConnect, AnkiConnectError, load_settings, validate_url
 from src.anki_export import FIELD_NAMES, MODEL_NAME
+from src.anki_export import prepare_card
 from src.gui.app import create_app
 from src.project_store import ProjectStore
 
@@ -29,8 +30,8 @@ class FakeAnki(AnkiConnect):
         if action == "modelFieldNames":
             return list(FIELD_NAMES)
         if action == "findNotes":
-            return [note_id for note_id, note in self.notes.items()
-                    if note["tags"][-1] in params["query"]]
+            assert params["query"] == f'"note:{MODEL_NAME}"'
+            return list(self.notes)
         if action == "storeMediaFile":
             return params["filename"]
         if action == "addNote":
@@ -40,7 +41,70 @@ class FakeAnki(AnkiConnect):
             self.notes[note_id] = params["note"]
             return note_id
         if action == "notesInfo":
-            return [{"modelName": MODEL_NAME, "cards": [100]}]
+            return [{"noteId": note_id, "modelName": MODEL_NAME, "cards": [100],
+                     "tags": self.notes[note_id]["tags"],
+                     "fields": {name: {"value": value} for name, value in self.notes[note_id]["fields"].items()}}
+                    for note_id in params["notes"]]
+        if action == "addTags":
+            for note_id in params["notes"]:
+                self.notes[note_id]["tags"] = list(set(self.notes[note_id]["tags"] + params["tags"].split()))
+        if action == "updateNoteFields":
+            self.notes[params["note"]["id"]]["fields"].update(params["note"]["fields"])
+
+
+def legacy_note(project, card, directory):
+    values, _, _ = prepare_card(project, card, directory, [])
+    return {"fields": dict(zip(FIELD_NAMES, values)), "tags": ["existing_user_tag"]}
+
+
+def test_legacy_package_import_updates_original_and_adds_identity(tmp_path):
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
+    anki = FakeAnki()
+    anki.notes[1] = legacy_note(project, project["cards"][0], tmp_path)
+    project["cards"][0]["back"] = "Edited answer"
+
+    assert anki.import_project(project, tmp_path, "Default", []) == (0, 1)
+    assert len(anki.notes) == 1
+    assert anki.notes[1]["fields"]["Back"] == "Edited answer"
+    assert "existing_user_tag" in anki.notes[1]["tags"]
+    assert any(tag.startswith("anki_pipeline::") for tag in anki.notes[1]["tags"])
+    assert not any(action == "addNote" for action, _ in anki.calls)
+
+
+def test_existing_duplicates_stop_entire_batch_before_any_changes(tmp_path):
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | New | A\n2 | recall | Old | A2")
+    anki = FakeAnki()
+    anki.notes = {index: legacy_note(project, project["cards"][1], tmp_path) for index in [1, 2]}
+
+    with pytest.raises(AnkiConnectError, match="несколько копий"):
+        anki.import_project(project, tmp_path, "Default", [])
+    assert all(action in {"deckNames", "findNotes", "notesInfo"} for action, _ in anki.calls)
+
+
+def test_identity_still_matches_when_front_is_edited(tmp_path):
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
+    anki = FakeAnki()
+    assert anki.import_project(project, tmp_path, "Default", []) == (1, 0)
+    project["cards"][0]["front"] = "Updated question"
+    assert anki.import_project(project, tmp_path, "Default", []) == (0, 1)
+    assert len(anki.notes) == 1
+    assert anki.notes[1]["fields"]["Front"] == "Updated question"
+
+
+def test_foreign_project_identity_is_not_adopted(tmp_path):
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
+    anki = FakeAnki()
+    anki.notes[1] = legacy_note(project, project["cards"][0], tmp_path)
+    anki.notes[1]["tags"].append("anki_pipeline::another_project")
+    with pytest.raises(AnkiConnectError, match="другой карточкой"):
+        anki.import_project(project, tmp_path, "Default", [])
+
+
+def test_new_notes_do_not_allow_duplicates(tmp_path):
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
+    anki = FakeAnki()
+    anki.import_project(project, tmp_path, "Default", [])
+    assert anki.notes[1]["options"]["allowDuplicate"] is False
 
 
 def test_import_repeat_updates_and_moves_with_audio(tmp_path):

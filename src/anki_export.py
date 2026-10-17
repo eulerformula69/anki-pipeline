@@ -139,7 +139,10 @@ def prepare_card(project: dict[str, Any], card: dict[str, Any], project_director
     media: list[tuple[str, Path]] = []
     tags = [
         re.sub(r"\s+", "_", tag.strip())
-        for tag in dict.fromkeys([*card["tags"], *global_tags])
+        for tag in dict.fromkeys([
+            *card["tags"], *global_tags,
+            f"anki_pipeline::{stable_guid(project['id'], card['id'])}",
+        ])
         if tag.strip()
     ]
     audio_field = ""

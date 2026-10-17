@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .anki_export import FIELD_NAMES, MODEL_NAME, _model, prepare_card, stable_guid
+from .anki_matching import NoteMatchError, find_import_targets
 
 DEFAULT_URL = "http://127.0.0.1:8765"
 
@@ -104,34 +105,34 @@ class AnkiConnect:
         if any(not card["front"].strip() or not card["back"].strip() for card in cards):
             raise AnkiConnectError("У каждой включённой карточки должны быть вопрос и ответ.")
         prepared = [prepare_card(project, card, directory, tags) for card in cards]
+        identities = [f"anki_pipeline::{stable_guid(project['id'], card['id'])}" for card in cards]
+        try:
+            targets = find_import_targets(self, project["name"], [
+                (marker, dict(zip(FIELD_NAMES, values, strict=True)))
+                for marker, (values, _, _) in zip(identities, prepared, strict=True)
+            ])
+        except NoteMatchError as exc:
+            raise AnkiConnectError(str(exc)) from exc
         self.ensure_model()
         added = updated = 0
         try:
-            for card, (values, note_tags, media) in zip(cards, prepared, strict=True):
-                identity = stable_guid(project["id"], card["id"])
-                marker = f"anki_pipeline::{identity}"
-                existing = self.call("findNotes", query=f"(guid:{identity} or tag:{marker})")
-                if len(existing) > 1:
-                    raise AnkiConnectError(f"Найдено несколько копий карточки {card['id']} в Anki.")
+            for (values, note_tags, media), target in zip(prepared, targets, strict=True):
                 for filename, source in media:
                     stored = self.call("storeMediaFile", filename=filename,
                                        data=base64.b64encode(source.read_bytes()).decode("ascii"))
                     if stored != filename:
                         raise AnkiConnectError("Anki изменил имя аудиофайла. Импорт остановлен.")
                 fields = dict(zip(FIELD_NAMES, values, strict=True))
-                if existing:
-                    note_id = existing[0]
-                    info = self.call("notesInfo", notes=[note_id])
-                    if not info or info[0].get("modelName") != MODEL_NAME:
-                        raise AnkiConnectError("Шаблон ранее отправленной карточки изменён в Anki.")
+                if target:
+                    note_id = target["noteId"]
                     self.call("updateNoteFields", note={"id": note_id, "fields": fields})
-                    self.call("addTags", notes=[note_id], tags=" ".join([*note_tags, marker]))
-                    self.call("changeDeck", cards=info[0]["cards"], deck=deck_name)
+                    self.call("addTags", notes=[note_id], tags=" ".join(note_tags))
+                    self.call("changeDeck", cards=target["cards"], deck=deck_name)
                     updated += 1
                 else:
                     note_id = self.call("addNote", note={"deckName": deck_name, "modelName": MODEL_NAME,
-                              "fields": fields, "tags": [*note_tags, marker],
-                              "options": {"allowDuplicate": True}})
+                              "fields": fields, "tags": note_tags,
+                              "options": {"allowDuplicate": False}})
                     if not isinstance(note_id, int) or isinstance(note_id, bool):
                         raise AnkiConnectError("Anki не подтвердил создание карточки.")
                     added += 1
