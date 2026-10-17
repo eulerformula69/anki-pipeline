@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from ..audio_sources import AudioDownload, AudioLookupError, forvo_search_url
 from ..audio_tts import find_or_generate_audio
@@ -171,6 +172,7 @@ async def update_card(
     tags: Annotated[str, Form()] = "",
     included: Annotated[bool, Form()] = False,
     audio_file: Annotated[UploadFile | None, File()] = None,
+    action: Annotated[str, Form()] = "save",
 ):
     _check_csrf(request, csrf)
     parsed_tags = [tag for tag in re.split(r"[,\s]+", tags) if tag]
@@ -209,7 +211,19 @@ async def update_card(
             )
     except ProjectError as exc:
         return _error(request, str(exc))
-    suffix = "?audio_uploaded=1" if upload else ""
+    if action == "audio":
+        if not audio_text.strip():
+            return _error(request, "Карточка сохранена. Укажите текст для аудио и повторите попытку.")
+        try:
+            download = await run_in_threadpool(find_or_generate_audio, audio_text, audio_reading)
+            if download is None:
+                return _error(request, "Карточка сохранена, но аудио не найдено. Повторите попытку.")
+            request.app.state.projects.attach_audio(
+                project_id, card_id, download, source=download.source_name
+            )
+        except (AudioLookupError, ProjectError) as exc:
+            return _error(request, f"Карточка сохранена. {exc}")
+    suffix = "?audio_uploaded=1" if upload or action == "audio" else ""
     return RedirectResponse(f"/projects/{project_id}{suffix}#{card_id}", 303)
 
 

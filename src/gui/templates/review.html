@@ -57,6 +57,7 @@
       {% elif card.forvo_url %}
       <p class="audio-status">Аудио пока нет. Нажмите «Добавить аудио» или <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">найдите запись на Forvo</a>.</p>
       {% endif %}
+      <button name="action" value="audio" data-busy-label="Добавляем аудио…">Добавить аудио</button>
       <label>Загрузить свою запись
         <small>Файл сохранится сразу. MP3, OGG, OGA или WAV, до 10 МБ</small>
         <small class="audio-upload-status">Загружаем аудио…</small>

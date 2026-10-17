@@ -5,8 +5,48 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from src.audio_sources import AudioDownload
+from src.audio_sources import AudioDownload, AudioLookupError
 from src.gui.app import create_app
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_add_audio_for_one_card_saves_edits_and_leaves_other_cards(tmp_path, monkeypatch, failure):
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+    project = client.app.state.projects.create(
+        "Single audio", "1 | recall | Перевод? | 猫\n2 | recall | Перевод? | 犬"
+    )
+    project_id = project["id"]
+    original = AudioDownload(b"original", ".mp3", "", "", "speaker")
+    client.app.state.projects.attach_audio(project_id, "card_0002", original, source="Original")
+    before = client.app.state.projects.load(project_id)["cards"][1]
+    calls = []
+
+    def lookup(text, reading):
+        calls.append((text, reading))
+        if failure:
+            raise AudioLookupError("Сервис недоступен.")
+        return AudioDownload(b"ID3single", ".mp3", "", "", "Nanami", "Nanami")
+
+    monkeypatch.setattr("src.gui.routes.find_or_generate_audio", lookup)
+    url = f"/projects/{project_id}/cards/card_0001"
+    response = client.post(url, data={
+        "csrf": token, "front": "Новый вопрос", "back": "絞り込む",
+        "audio_text": "絞り込む", "audio_reading": "しぼりこむ",
+        "included": "true", "action": "audio",
+    }, follow_redirects=False)
+    assert calls == [("絞り込む", "しぼりこむ")]
+    cards = client.app.state.projects.load(project_id)["cards"]
+    assert cards[0]["front"] == "Новый вопрос"
+    assert cards[1] == before
+    if failure:
+        assert response.status_code == 422
+        assert "Карточка сохранена" in response.text
+        assert cards[0]["audio"] is None
+    else:
+        assert response.status_code == 303
+        assert response.headers["location"].endswith("#card_0001")
+        assert client.get(f"{url}/audio").content == b"ID3single"
 
 
 def test_generated_audio_can_be_previewed_and_exported(tmp_path, monkeypatch):
