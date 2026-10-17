@@ -1,4 +1,5 @@
 import re
+import zipfile
 from datetime import datetime
 
 import pytest
@@ -6,6 +7,33 @@ from fastapi.testclient import TestClient
 
 from src.audio_sources import AudioDownload
 from src.gui.app import create_app
+
+
+def test_generated_audio_can_be_previewed_and_exported(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.audio_tts.find_native_audio", lambda *args: None)
+
+    async def synthesize(text):
+        assert text == "この情報が信頼できるかどうか調べています。"
+        return b"ID3generated-speech"
+
+    monkeypatch.setattr("src.audio_tts._synthesize", synthesize)
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+    created = client.post("/projects", data={
+        "csrf": token,
+        "cards_text": "1 | recall | Перевод? | この情報が信頼できるかどうか調べています。",
+    }, follow_redirects=False)
+    url = created.headers["location"]
+    result = client.post(f"{url}/audio/find", data={"csrf": token}, follow_redirects=False)
+    assert "audio_found=1" in result.headers["location"]
+    assert "Синтез речи · Nanami" in client.get(url).text
+    preview = client.get(f"{url}/cards/card_0001/audio")
+    assert preview.content == b"ID3generated-speech"
+    assert preview.headers["content-type"] == "audio/mpeg"
+    exported = client.post(f"{url}/export", data={"csrf": token, "deck_name": "Nanami"})
+    assert exported.status_code == 200
+    with zipfile.ZipFile(tmp_path / "output" / url.rsplit("/", 1)[-1] / "deck.apkg") as package:
+        assert b"ID3generated-speech" in [package.read(name) for name in package.namelist()]
 
 
 @pytest.mark.parametrize("name", [None, "", "   "])
@@ -52,7 +80,7 @@ def test_full_card_flow(tmp_path, monkeypatch) -> None:
     page = client.get(created.headers["location"])
     assert "Question?" in page.text
     assert "Создать `.apkg`" in page.text
-    assert "Найти аудио носителей" in page.text
+    assert "Добавить аудио" in page.text
     assert 'name="audio_text"' in page.text
     assert 'name="audio_reading"' in page.text
     assert "this.form.requestSubmit()" in page.text
@@ -100,7 +128,7 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
     )
     project_url = created.headers["location"]
     monkeypatch.setattr(
-        "src.gui.routes.find_native_audio",
+        "src.gui.routes.find_or_generate_audio",
         lambda value, reading: AudioDownload(
             b"OggS", ".ogg", "https://example.test", "CC0", "Speaker"
         ),
@@ -118,6 +146,13 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
     assert preview.status_code == 200
     assert preview.content == b"OggS"
     assert preview.headers["content-type"] == "audio/ogg"
+
+    monkeypatch.setattr(
+        "src.gui.routes.find_or_generate_audio",
+        lambda *args: pytest.fail("Existing audio was regenerated"),
+    )
+    repeated = client.post(f"{project_url}/audio/find", data={"csrf": token}, follow_redirects=False)
+    assert "audio_found=0" in repeated.headers["location"]
 
     uploaded = client.post(
         f"{project_url}/cards/card_0001",

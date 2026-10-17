@@ -11,7 +11,8 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from ..audio_sources import AudioDownload, AudioLookupError, find_native_audio, forvo_search_url
+from ..audio_sources import AudioDownload, AudioLookupError, forvo_search_url
+from ..audio_tts import find_or_generate_audio
 from ..anki_export import AnkiExportError, build_anki_deck
 from ..project_store import ProjectError
 
@@ -233,7 +234,7 @@ def find_audio(request: Request, project_id: str, csrf: Annotated[str, Form()]):
 
     def lookup(card: dict[str, Any]) -> AudioDownload | AudioLookupError | None:
         try:
-            return find_native_audio(card["audio_text"], card["audio_reading"])
+            return find_or_generate_audio(card["audio_text"], card["audio_reading"])
         except AudioLookupError as exc:
             return exc
 

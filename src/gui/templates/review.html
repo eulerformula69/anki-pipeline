@@ -5,13 +5,14 @@
 <section class="panel toolbar">
   <div><p class="eyebrow">ПРОВЕРКА</p><h1>{{ project.name }}</h1><p>{{ included }} из {{ project.cards|length }} карточек войдут в колоду.</p></div>
   <div class="toolbar-actions">
-    <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button data-busy-label="Ищем аудио…">Найти аудио носителей</button></form>
+    <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button data-busy-label="Добавляем аудио…">Добавить аудио</button></form>
     <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary" data-busy-label="Добавляем…">+ Карточка</button></form>
   </div>
 </section>
+<p>Сначала ищем записи носителей. Если записи нет, создаём бесплатную озвучку голосом Nanami. Нужен интернет. Сохраните изменения карточек перед добавлением аудио.</p>
 
 {% if audio_found is not none %}
-<p class="notice">Найдено записей: {{ audio_found }}. Без совпадения: {{ audio_missing }}. Ошибок загрузки: {{ audio_failed }}.</p>
+<p class="notice">Добавлено аудио: {{ audio_found }}. Без аудио: {{ audio_missing }}. Ошибок: {{ audio_failed }}. При ошибке проверьте интернет и повторите попытку.</p>
 {% endif %}
 {% if audio_uploaded %}<p class="notice">Аудио сохранено.</p>{% endif %}
 {% if deck_created %}<p class="notice">Колода создана.</p>{% endif %}
@@ -43,7 +44,7 @@
     <label>Ответ<textarea name="back" required>{{ card.back }}</textarea></label>
     <label>Дополнение<textarea name="extra">{{ card.extra }}</textarea></label>
     <div class="audio-editor">
-      <label>Текст для поиска аудио<input name="audio_text" value="{{ card.audio_text }}" placeholder="関する"></label>
+      <label>Текст для аудио<input name="audio_text" value="{{ card.audio_text }}" placeholder="関する"></label>
       <label>Чтение<input name="audio_reading" value="{{ card.audio_reading }}" placeholder="かんする"></label>
       {% if card.audio and card.audio.text == card.audio_text and card.audio.reading == card.audio_reading %}
       <p class="audio-status">Запись добавлена:
@@ -52,9 +53,9 @@
       </p>
       <audio class="audio-preview" controls preload="none" src="/projects/{{ project.id }}/cards/{{ card.id }}/audio">Ваш браузер не поддерживает аудио.</audio>
       {% elif card.audio %}
-      <p class="audio-status">Текст изменён. Найдите или загрузите запись заново.</p>
+      <p class="audio-status">Текст изменён. Нажмите «Добавить аудио», чтобы обновить запись.</p>
       {% elif card.forvo_url %}
-      <p class="audio-status">Открытой записи пока нет. <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">Найти на Forvo</a></p>
+      <p class="audio-status">Аудио пока нет. Нажмите «Добавить аудио» или <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">найдите запись на Forvo</a>.</p>
       {% endif %}
       <label>Загрузить свою запись
         <small>Файл сохранится сразу. MP3, OGG, OGA или WAV, до 10 МБ</small>
