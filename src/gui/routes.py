@@ -172,7 +172,7 @@ async def update_card(
     tags: Annotated[str, Form()] = "",
     included: Annotated[bool, Form()] = False,
     audio_file: Annotated[UploadFile | None, File()] = None,
-    action: Annotated[str, Form()] = "save",
+    audio_action: Annotated[str, Form()] = "",
 ):
     _check_csrf(request, csrf)
     parsed_tags = [tag for tag in re.split(r"[,\s]+", tags) if tag]
@@ -211,7 +211,7 @@ async def update_card(
             )
     except ProjectError as exc:
         return _error(request, str(exc))
-    if action == "audio":
+    if audio_action == "generate":
         if not audio_text.strip():
             return _error(request, "Карточка сохранена. Укажите текст для аудио и повторите попытку.")
         try:
@@ -223,7 +223,7 @@ async def update_card(
             )
         except (AudioLookupError, ProjectError) as exc:
             return _error(request, f"Карточка сохранена. {exc}")
-    suffix = "?audio_uploaded=1" if upload or action == "audio" else ""
+    suffix = "?audio_uploaded=1" if upload or audio_action == "generate" else ""
     return RedirectResponse(f"/projects/{project_id}{suffix}#{card_id}", 303)
 
 

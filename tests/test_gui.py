@@ -33,7 +33,7 @@ def test_add_audio_for_one_card_saves_edits_and_leaves_other_cards(tmp_path, mon
     response = client.post(url, data={
         "csrf": token, "front": "Новый вопрос", "back": "絞り込む",
         "audio_text": "絞り込む", "audio_reading": "しぼりこむ",
-        "included": "true", "action": "audio",
+        "included": "true", "audio_action": "generate",
     }, follow_redirects=False)
     assert calls == [("絞り込む", "しぼりこむ")]
     cards = client.app.state.projects.load(project_id)["cards"]
@@ -129,7 +129,7 @@ def test_full_card_flow(tmp_path, monkeypatch) -> None:
     assert "Создаём `.apkg`…" in page.text
     script = client.get("/static/app.js?v=3")
     assert script.status_code == 200
-    assert 'fetch(form.action' in script.text
+    assert 'fetch(form.getAttribute("action")' in script.text
 
 
 def test_create_requires_exactly_one_card_input(tmp_path) -> None:

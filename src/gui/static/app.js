@@ -25,7 +25,7 @@ document.addEventListener("submit", async (event) => {
   }
 
   try {
-    const response = await fetch(form.action, {
+    const response = await fetch(form.getAttribute("action"), {
       method: form.method,
       body: data,
     });
