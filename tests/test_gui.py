@@ -1,7 +1,34 @@
+import re
+from datetime import datetime
+
+import pytest
 from fastapi.testclient import TestClient
 
 from src.audio_sources import AudioDownload
 from src.gui.app import create_app
+
+
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test_create_project_without_name(tmp_path, name) -> None:
+    client = TestClient(create_app(root=tmp_path))
+    index = client.get("/")
+    name_input = re.search(r'<input name="project_name"[^>]*>', index.text).group()
+    assert "required" not in name_input
+    data = {"csrf": index.cookies["anki_csrf"], "cards_text": "1 | recall | Q | A"}
+    if name is not None:
+        data["project_name"] = name
+    before = datetime.now().astimezone().date().isoformat()
+
+    response = client.post("/projects", data=data, follow_redirects=False)
+
+    after = datetime.now().astimezone().date().isoformat()
+    assert response.status_code == 303
+    project_id = response.headers["location"].rsplit("/", 1)[-1]
+    project = client.app.state.projects.load(project_id)
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}-[0-9a-f]{8}", project["name"])
+    assert project["name"][:10] in {before, after}
+    assert project_id == project["name"]
+    assert project["name"] in client.get(response.headers["location"]).text
 
 
 def test_full_card_flow(tmp_path, monkeypatch) -> None:

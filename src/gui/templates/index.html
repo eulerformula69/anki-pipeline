@@ -9,7 +9,7 @@
 
 <form class="panel start-card" method="post" action="/projects" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <label>Название проекта<input name="project_name" maxlength="120" required placeholder="Например, Машинное обучение · лекция 4"></label>
+  <label>Название проекта (необязательно)<input name="project_name" maxlength="120" placeholder="По умолчанию: ГГГГ-ММ-ДД-ХЭШ"></label>
   <label>Ответ LLM<small>Одна строка: ID | type | question | answer</small><textarea name="cards_text" rows="12" placeholder="1 | recall | Что такое градиент? | Вектор частных производных."></textarea></label>
   <div class="or">или</div>
   <label>Текстовый файл<input name="cards_file" type="file" accept=".txt,text/plain"></label>

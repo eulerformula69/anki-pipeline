@@ -88,7 +88,7 @@ def prompt() -> str:
 async def create_project(
     request: Request,
     csrf: Annotated[str, Form()],
-    project_name: Annotated[str, Form()],
+    project_name: Annotated[str, Form()] = "",
     cards_text: Annotated[str, Form()] = "",
     cards_file: Annotated[UploadFile | None, File()] = None,
 ):

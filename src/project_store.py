@@ -40,13 +40,18 @@ class ProjectStore:
 
     def create(self, name: str, text: str) -> dict[str, Any]:
         clean_name = " ".join(name.split())
-        if not clean_name or len(clean_name) > 120:
-            raise ProjectError("Название должно содержать от 1 до 120 символов.")
+        if len(clean_name) > 120:
+            raise ProjectError("Название должно содержать не больше 120 символов.")
         try:
             parsed = parse_llm_response(text)
         except CardInputError as exc:
             raise ProjectError(str(exc)) from exc
-        project_id = f"{_slug(clean_name)}-{secrets.token_hex(4)}"
+        suffix = secrets.token_hex(4)
+        if not clean_name:
+            clean_name = f"{datetime.now().astimezone():%Y-%m-%d}-{suffix}"
+            project_id = clean_name
+        else:
+            project_id = f"{_slug(clean_name)}-{suffix}"
         now = _now()
         project = {
             "version": 1,
