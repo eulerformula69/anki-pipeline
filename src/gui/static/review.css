@@ -9,14 +9,14 @@
 .review-page .add-cards { padding: .85rem 1.1rem; }
 .review-page .add-cards summary { font-size: .875rem; font-weight: 600; }
 .review-page .cards { gap: 1.5rem; }
-.review-page .review-card { position: relative; display: block; padding: 1.25rem; background: #fff; box-shadow: 0 3px 15px rgba(25,48,33,.035); scroll-margin-top: 1rem; }
+.review-page .review-card { position: relative; display: block; padding: 1.25rem; background: var(--paper); box-shadow: 0 3px 15px rgba(23,37,47,.035); scroll-margin-top: 1rem; }
 .review-page .editor { gap: 1rem; min-width: 0; }
 .review-page .card-head { flex-wrap: wrap; gap: .5rem; padding-bottom: .8rem; border-bottom: 1px solid var(--line); padding-right: 5.5rem; }
 .review-page .card-head strong { font-size: .9rem; font-weight: 650; }
 .review-page .card-head strong small { font-size: .8rem; margin-left: .2rem; }
 .review-page .card-head span { font-size: .6rem; letter-spacing: .025em; }
 .review-page .check { margin-left: 0; font-size: .8rem; font-weight: 500; min-height: 2rem; }
-.review-page .check input { accent-color: var(--green); width: 1rem; height: 1rem; }
+.review-page .check input { accent-color: var(--accent-ink); width: 1rem; height: 1rem; }
 .review-page .order { position: absolute; right: 1rem; top: 1rem; display: flex; gap: .25rem; }
 .review-page .order button { width: 2.5rem; min-height: 2.5rem; }
 .review-page label { font-size: .8rem; font-weight: 600; gap: .35rem; }
@@ -24,17 +24,17 @@
 .review-page textarea { min-height: 3rem; resize: vertical; }
 .review-page textarea[name="front"], .review-page textarea[name="back"] { min-height: 4.5rem; }
 .review-page textarea[name="back"] { font-size: 1.1rem; }
-.review-page textarea:focus, .review-page input:focus { border-color: var(--green); outline: 3px solid #256a481c; }
+.review-page textarea:focus, .review-page input:focus { border-color: var(--accent-ink); outline: 3px solid var(--focus); }
 .review-page button { font-size: .85rem; font-weight: 600; }
 .review-page button:active:not(:disabled) { transform: scale(.97); }
-.review-page :focus-visible { outline: 3px solid #256a4870; outline-offset: 3px; }
+.review-page :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .card-options { border-block: 1px solid var(--line); padding-block: .8rem; }
 .card-options summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
 .card-options summary small { float: right; font-size: .75rem; }
-.card-options .audio-editor { margin-block: .9rem; background: #f7f9f7; }
+.card-options .audio-editor { margin-block: .9rem; background: var(--surface); }
 .card-save { display: flex; justify-content: space-between; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .save-status { font-size: .75rem; color: var(--muted); }
-.editor[data-unsaved="1"] .save-status { color: #8b590c; }
+.editor[data-unsaved="1"] .save-status { color: var(--warning); }
 .review-page .delete-card { margin-top: .75rem; }
 .review-page button.danger { min-height: 2.5rem; padding: .35rem .5rem; background: transparent; border-color: transparent; font-size: .75rem; }
 .review-page .export form { grid-template-columns: 1fr; }

@@ -4,13 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}anki-pipeline{% endblock %}</title>
-  <link rel="stylesheet" href="/static/app.css?v=2">
+  <meta name="theme-color" content="#17252f">
+  <link rel="icon" href="/static/icon.ico?v=1" sizes="16x16 24x24 32x32 48x48 64x64 128x128 256x256">
+  <link rel="icon" href="/static/icon.svg?v=1" type="image/svg+xml" sizes="any">
+  <link rel="stylesheet" href="/static/app.css?v=3">
   {% block styles %}{% endblock %}
   <script src="/static/app.js?v=6" defer></script>
   <script src="/static/anki-connect.js?v=1" defer></script>
 </head>
 <body>
-  <header><a href="/">anki-pipeline</a><span>Ответ LLM → Anki</span></header>
+  <header><a class="brand" href="/"><img src="/static/icon.svg" width="40" height="40" alt="">anki-pipeline</a><span>Ответ LLM → Anki</span></header>
   <main>{% block content %}{% endblock %}</main>
 </body>
 </html>
