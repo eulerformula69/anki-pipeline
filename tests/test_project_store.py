@@ -2,6 +2,8 @@ from src.audio_sources import AudioDownload
 from src.project_store import ProjectStore
 import pytest
 from src.project_store import ProjectError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from threading import Event
 
 
 def test_delete_preserves_other_cards_and_never_reuses_ids(tmp_path):
@@ -70,3 +72,76 @@ def test_project_stores_audio_file_and_metadata(tmp_path) -> None:
     assert saved["cards"][0]["audio_reading"] == "おんな"
     assert saved["cards"][0]["audio"]["license"] == "CC0"
     assert (tmp_path / "output" / project["id"] / "media" / "card_0001.ogg").read_bytes() == b"OggSdata"
+
+
+@pytest.mark.parametrize("operation", ["update", "append", "add", "delete", "move", "audio"])
+def test_concurrent_changes_preserve_both_operations(tmp_path, monkeypatch, operation):
+    store = ProjectStore(tmp_path)
+    project_id = store.create("Concurrent", "1 | recall | Q1 | A1\n2 | recall | Q2 | A2")["id"]
+    first_read = Event()
+    release = Event()
+    original_load = store.load
+
+    def delayed_load(project_id):
+        project = original_load(project_id)
+        if not first_read.is_set():
+            first_read.set()
+            assert release.wait(5)
+        return project
+
+    monkeypatch.setattr(store, "load", delayed_load)
+    updates = {"front": "Edited", "back": "A", "extra": "", "tags": [], "included": True}
+    actions = {
+        "update": lambda: store.update_card(project_id, "card_0002", updates),
+        "append": lambda: store.append(project_id, "3 | recall | Q3 | A3"),
+        "add": lambda: store.add_card(project_id),
+        "delete": lambda: store.delete_card(project_id, "card_0002"),
+        "move": lambda: store.move_card(project_id, "card_0002", "up"),
+        "audio": lambda: store.attach_audio(project_id, "card_0002",
+            AudioDownload(b"audio", ".mp3", "", "", ""), source="Test"),
+    }
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(store.update_card, project_id, "card_0001", updates)
+        try:
+            assert first_read.wait(5)
+            second = pool.submit(actions[operation])
+            try:
+                second.result(timeout=0.2)
+            except TimeoutError:
+                pass
+        finally:
+            release.set()
+        first.result(timeout=5)
+        second.result(timeout=5)
+
+    cards = original_load(project_id)["cards"]
+    by_id = {card["id"]: card for card in cards}
+    assert by_id["card_0001"]["front"] == "Edited"
+    if operation == "update":
+        assert by_id["card_0002"]["front"] == "Edited"
+    elif operation in {"append", "add"}:
+        assert len(cards) == 3
+        assert cards[-1]["id"] == "card_0003"
+    elif operation == "delete":
+        assert len(cards) == 1
+    elif operation == "move":
+        assert cards[0]["id"] == "card_0002"
+    else:
+        assert by_id["card_0002"]["audio"]["source"] == "Test"
+
+
+@pytest.mark.parametrize("field", ["audio_text", "audio_reading"])
+def test_outdated_audio_does_not_replace_existing_recording(tmp_path, field):
+    store = ProjectStore(tmp_path)
+    project_id = store.create("Audio", "1 | recall | Q | 猫[ねこ]")["id"]
+    store.attach_audio(project_id, "card_0001", AudioDownload(b"original", ".mp3", "", "", ""), source="Original")
+    card = store.load(project_id)["cards"][0]
+    expected = (card["audio_text"], card["audio_reading"])
+    store.update_card(project_id, "card_0001", {**card, field: "changed"})
+
+    with pytest.raises(ProjectError, match="Добавьте аудио повторно"):
+        store.attach_audio(project_id, "card_0001", AudioDownload(b"outdated", ".ogg", "", "", ""),
+                           source="Generated", expected_audio=expected)
+
+    assert store.audio_path(project_id, "card_0001").read_bytes() == b"original"
+    assert store.load(project_id)["cards"][0]["audio"] == card["audio"]

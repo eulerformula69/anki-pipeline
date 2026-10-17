@@ -252,3 +252,34 @@ def test_audio_preview_returns_not_found_without_recording(tmp_path) -> None:
     preview = client.get(f"{created.headers['location']}/cards/card_0001/audio")
 
     assert preview.status_code == 404
+
+
+@pytest.mark.parametrize("bulk", [False, True])
+@pytest.mark.parametrize("field", ["audio_text", "audio_reading"])
+def test_audio_changed_during_lookup_is_not_attached(tmp_path, monkeypatch, bulk, field):
+    client = TestClient(create_app(root=tmp_path))
+    token = client.get("/").cookies["anki_csrf"]
+    store = client.app.state.projects
+    project_id = store.create("Audio race", "1 | recall | Q | 猫[ねこ]")["id"]
+
+    def lookup(text, reading):
+        card = store.load(project_id)["cards"][0]
+        store.update_card(project_id, card["id"], {**card, field: "changed"})
+        return AudioDownload(b"outdated", ".mp3", "", "", "")
+
+    monkeypatch.setattr("src.gui.routes.find_or_generate_audio", lookup)
+    url = f"/projects/{project_id}"
+    if bulk:
+        response = client.post(f"{url}/audio/find", data={"csrf": token}, follow_redirects=False)
+        assert response.status_code == 303
+        assert "audio_failed=1" in response.headers["location"]
+    else:
+        response = client.post(f"{url}/cards/card_0001", data={
+            "csrf": token, "front": "Q", "back": "猫[ねこ]", "included": "true",
+            "audio_text": "猫", "audio_reading": "ねこ", "audio_action": "generate",
+        })
+        assert response.status_code == 422
+        assert "Добавьте аудио повторно" in response.text
+    card = store.load(project_id)["cards"][0]
+    assert card[field] == "changed"
+    assert card["audio"] is None

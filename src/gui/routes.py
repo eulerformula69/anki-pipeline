@@ -208,6 +208,7 @@ async def update_card(
                 card_id,
                 AudioDownload(data, suffix, "", "", ""),
                 source="Загружено вручную",
+                expected_audio=(audio_text.strip(), audio_reading.strip()),
             )
     except ProjectError as exc:
         return _error(request, str(exc))
@@ -219,7 +220,8 @@ async def update_card(
             if download is None:
                 return _error(request, "Карточка сохранена, но аудио не найдено. Повторите попытку.")
             request.app.state.projects.attach_audio(
-                project_id, card_id, download, source=download.source_name
+                project_id, card_id, download, source=download.source_name,
+                expected_audio=(audio_text.strip(), audio_reading.strip()),
             )
         except (AudioLookupError, ProjectError) as exc:
             return _error(request, f"Карточка сохранена. {exc}")
@@ -264,7 +266,8 @@ def find_audio(request: Request, project_id: str, csrf: Annotated[str, Form()]):
             continue
         try:
             request.app.state.projects.attach_audio(
-                project_id, card["id"], download, source=download.source_name
+                project_id, card["id"], download, source=download.source_name,
+                expected_audio=(card["audio_text"], card["audio_reading"]),
             )
         except ProjectError:
             failed += 1

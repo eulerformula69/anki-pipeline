@@ -94,57 +94,60 @@ class ProjectStore:
                     os.unlink(temporary)
 
     def append(self, project_id: str, text: str) -> dict[str, Any]:
-        project = self.load(project_id)
-        try:
-            parsed = parse_llm_response(text)
-        except CardInputError as exc:
-            raise ProjectError(str(exc)) from exc
-        project["cards"].extend(to_project_cards(parsed, start=self._next_card_number(project)))
-        self.save(project)
-        return project
+        with self._lock:
+            project = self.load(project_id)
+            try:
+                parsed = parse_llm_response(text)
+            except CardInputError as exc:
+                raise ProjectError(str(exc)) from exc
+            project["cards"].extend(to_project_cards(parsed, start=self._next_card_number(project)))
+            self.save(project)
+            return project
 
     def update_card(self, project_id: str, card_id: str, updates: dict[str, Any]) -> None:
-        project = self.load(project_id)
-        card = self._card(project, card_id)
-        for field in ("front", "back", "extra"):
-            value = updates.get(field)
-            if not isinstance(value, str):
-                raise ProjectError(f"Поле {field} должно быть текстом.")
-            card[field] = value
-        audio_text = updates.get("audio_text", card.get("audio_text", ""))
-        if not isinstance(audio_text, str):
-            raise ProjectError("Текст для аудио должен быть строкой.")
-        card["audio_text"] = audio_text.strip()
-        audio_reading = updates.get("audio_reading", card.get("audio_reading", ""))
-        if not isinstance(audio_reading, str):
-            raise ProjectError("Чтение для аудио должно быть строкой.")
-        card["audio_reading"] = audio_reading.strip()
-        tags = updates.get("tags")
-        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
-            raise ProjectError("Теги должны быть списком строк.")
-        card["tags"] = list(dict.fromkeys(tag for tag in tags if tag))
-        card["included"] = bool(updates.get("included"))
-        self.save(project)
+        with self._lock:
+            project = self.load(project_id)
+            card = self._card(project, card_id)
+            for field in ("front", "back", "extra"):
+                value = updates.get(field)
+                if not isinstance(value, str):
+                    raise ProjectError(f"Поле {field} должно быть текстом.")
+                card[field] = value
+            audio_text = updates.get("audio_text", card.get("audio_text", ""))
+            if not isinstance(audio_text, str):
+                raise ProjectError("Текст для аудио должен быть строкой.")
+            card["audio_text"] = audio_text.strip()
+            audio_reading = updates.get("audio_reading", card.get("audio_reading", ""))
+            if not isinstance(audio_reading, str):
+                raise ProjectError("Чтение для аудио должно быть строкой.")
+            card["audio_reading"] = audio_reading.strip()
+            tags = updates.get("tags")
+            if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+                raise ProjectError("Теги должны быть списком строк.")
+            card["tags"] = list(dict.fromkeys(tag for tag in tags if tag))
+            card["included"] = bool(updates.get("included"))
+            self.save(project)
 
     def add_card(self, project_id: str) -> str:
-        project = self.load(project_id)
-        position = self._next_card_number(project)
-        card_id = f"card_{position:04d}"
-        project["cards"].append({
-            "id": card_id,
-            "source_id": "manual",
-            "type": "recall",
-            "front": "",
-            "back": "",
-            "extra": "",
-            "audio_text": "",
-            "audio_reading": "",
-            "audio": None,
-            "tags": ["manual"],
-            "included": True,
-        })
-        self.save(project)
-        return card_id
+        with self._lock:
+            project = self.load(project_id)
+            position = self._next_card_number(project)
+            card_id = f"card_{position:04d}"
+            project["cards"].append({
+                "id": card_id,
+                "source_id": "manual",
+                "type": "recall",
+                "front": "",
+                "back": "",
+                "extra": "",
+                "audio_text": "",
+                "audio_reading": "",
+                "audio": None,
+                "tags": ["manual"],
+                "included": True,
+            })
+            self.save(project)
+            return card_id
 
     @staticmethod
     def _next_card_number(project: dict[str, Any]) -> int:
@@ -154,52 +157,58 @@ class ProjectStore:
         )
 
     def delete_card(self, project_id: str, card_id: str) -> None:
-        project = self.load(project_id)
-        card = self._card(project, card_id)
-        project["next_card_number"] = self._next_card_number(project)
-        project["cards"].remove(card)
-        self.save(project)
-
-    def move_card(self, project_id: str, card_id: str, direction: str) -> None:
-        project = self.load(project_id)
-        index = next((i for i, card in enumerate(project["cards"]) if card["id"] == card_id), None)
-        if index is None:
-            raise ProjectError("Карточка не найдена.")
-        if direction not in {"up", "down"}:
-            raise ProjectError("Неизвестное направление.")
-        target = index - 1 if direction == "up" else index + 1
-        if 0 <= target < len(project["cards"]):
-            project["cards"][index], project["cards"][target] = project["cards"][target], project["cards"][index]
+        with self._lock:
+            project = self.load(project_id)
+            card = self._card(project, card_id)
+            project["next_card_number"] = self._next_card_number(project)
+            project["cards"].remove(card)
             self.save(project)
 
+    def move_card(self, project_id: str, card_id: str, direction: str) -> None:
+        with self._lock:
+            project = self.load(project_id)
+            index = next((i for i, card in enumerate(project["cards"]) if card["id"] == card_id), None)
+            if index is None:
+                raise ProjectError("Карточка не найдена.")
+            if direction not in {"up", "down"}:
+                raise ProjectError("Неизвестное направление.")
+            target = index - 1 if direction == "up" else index + 1
+            if 0 <= target < len(project["cards"]):
+                project["cards"][index], project["cards"][target] = project["cards"][target], project["cards"][index]
+                self.save(project)
+
     def attach_audio(
-        self, project_id: str, card_id: str, download: AudioDownload, *, source: str
+        self, project_id: str, card_id: str, download: AudioDownload, *, source: str,
+        expected_audio: tuple[str, str] | None = None,
     ) -> None:
-        if download.suffix not in {".mp3", ".ogg", ".oga", ".wav"} or not download.data:
-            raise ProjectError("Некорректный аудиофайл.")
-        project = self.load(project_id)
-        card = self._card(project, card_id)
-        media_directory = self._path(project_id).parent / "media"
-        media_directory.mkdir(parents=True, exist_ok=True)
-        destination = media_directory / f"{card_id}{download.suffix}"
-        temporary = media_directory / f".{card_id}{download.suffix}.tmp"
-        temporary.write_bytes(download.data)
-        temporary.replace(destination)
-        previous = card.get("audio")
-        if isinstance(previous, dict) and previous.get("path") != f"media/{destination.name}":
-            old_path = self._path(project_id).parent / str(previous.get("path", ""))
-            if old_path.resolve().is_relative_to(media_directory.resolve()):
-                old_path.unlink(missing_ok=True)
-        card["audio"] = {
-            "path": f"media/{destination.name}",
-            "text": card["audio_text"],
-            "reading": card["audio_reading"],
-            "source": source,
-            "source_url": download.source_url,
-            "license": download.license_name,
-            "attribution": download.attribution,
-        }
-        self.save(project)
+        with self._lock:
+            if download.suffix not in {".mp3", ".ogg", ".oga", ".wav"} or not download.data:
+                raise ProjectError("Некорректный аудиофайл.")
+            project = self.load(project_id)
+            card = self._card(project, card_id)
+            if expected_audio is not None and expected_audio != (card["audio_text"], card["audio_reading"]):
+                raise ProjectError("Текст или чтение изменились. Добавьте аудио повторно.")
+            media_directory = self._path(project_id).parent / "media"
+            media_directory.mkdir(parents=True, exist_ok=True)
+            destination = media_directory / f"{card_id}{download.suffix}"
+            temporary = media_directory / f".{card_id}{download.suffix}.tmp"
+            temporary.write_bytes(download.data)
+            temporary.replace(destination)
+            previous = card.get("audio")
+            if isinstance(previous, dict) and previous.get("path") != f"media/{destination.name}":
+                old_path = self._path(project_id).parent / str(previous.get("path", ""))
+                if old_path.resolve().is_relative_to(media_directory.resolve()):
+                    old_path.unlink(missing_ok=True)
+            card["audio"] = {
+                "path": f"media/{destination.name}",
+                "text": card["audio_text"],
+                "reading": card["audio_reading"],
+                "source": source,
+                "source_url": download.source_url,
+                "license": download.license_name,
+                "attribution": download.attribution,
+            }
+            self.save(project)
 
     def audio_path(self, project_id: str, card_id: str) -> Path:
         project = self.load(project_id)

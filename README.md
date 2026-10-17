@@ -99,3 +99,9 @@ ID | type | question | answer
 ```powershell
 py -m pytest
 ```
+
+Проверка логики интерфейса (нужен Node.js, дополнительные пакеты не требуются):
+
+```powershell
+node --test tests/test_app.cjs
+```

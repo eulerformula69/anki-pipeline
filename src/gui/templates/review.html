@@ -4,7 +4,7 @@
 {% block content %}
 <div data-async-page class="review-page">
 <section class="panel toolbar">
-  <div><p class="eyebrow">ПРОВЕРКА</p><h1>{{ project.name }}</h1><p>{{ included }} из {{ project.cards|length }} карточек войдут в колоду.</p></div>
+  <div><p class="eyebrow">ПРОВЕРКА</p><h1>{{ project.name }}</h1><p data-card-count>{{ included }} из {{ project.cards|length }} карточек войдут в колоду.</p></div>
   <div class="toolbar-actions">
     <form method="post" action="/projects/{{ project.id }}/audio/find"><input type="hidden" name="csrf" value="{{ csrf }}"><button data-busy-label="Добавляем аудио…">Добавить аудио</button></form>
     <form method="post" action="/projects/{{ project.id }}/cards/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary" data-busy-label="Добавляем…">+ Карточка</button></form>
