@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} · anki-pipeline{% endblock %}
-{% block styles %}<link rel="stylesheet" href="/static/review.css?v=2">{% endblock %}
+{% block styles %}<link rel="stylesheet" href="/static/review.css?v=3">{% endblock %}
 {% block content %}
 <div data-async-page class="review-page">
 <section class="panel toolbar">
@@ -45,7 +45,12 @@
     <label>Ответ<textarea rows="2" name="back" required>{{ card.back }}</textarea></label>
     <label>Дополнение<textarea rows="1" name="extra">{{ card.extra }}</textarea></label>
     <details class="card-options">
-      <summary>Аудио и теги <small>{{ "Есть запись" if card.audio else "Без записи" }}</small></summary>
+      <summary>Аудио и теги
+        {% if card.audio and card.audio.text == card.audio_text and card.audio.reading == card.audio_reading %}
+        <button type="button" class="audio-toggle" aria-label="Прослушать аудио" title="Прослушать аудио" aria-pressed="false">▶</button>
+        {% endif %}
+        <small>{{ "Есть запись" if card.audio else "Без записи" }}</small>
+      </summary>
     <div class="audio-editor">
       <label>Текст для аудио<input name="audio_text" value="{{ card.audio_text }}" placeholder="関する"></label>
       <label>Чтение<input name="audio_reading" value="{{ card.audio_reading }}" placeholder="かんする"></label>

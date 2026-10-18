@@ -87,6 +87,35 @@ document.addEventListener('input', (event) => {
 window.addEventListener('resize', () => fitCardFields());
 fitCardFields();
 
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('.audio-toggle');
+  if (!button) return;
+  event.preventDefault();
+  const audio = button.closest('.card-options').querySelector('.audio-preview');
+  if (!audio.paused) {
+    audio.pause();
+    return;
+  }
+  try {
+    await audio.play();
+  } catch {
+    alert('Не удалось воспроизвести аудио. Проверьте соединение и повторите попытку.');
+  }
+});
+
+for (const type of ['play', 'pause', 'ended']) {
+  document.addEventListener(type, (event) => {
+    if (!event.target.matches('.audio-preview')) return;
+    const button = event.target.closest('.card-options').querySelector('.audio-toggle');
+    if (!button) return;
+    const playing = !event.target.paused && !event.target.ended;
+    button.textContent = playing ? '❚❚' : '▶';
+    button.title = playing ? 'Приостановить аудио' : 'Прослушать аудио';
+    button.setAttribute('aria-label', button.title);
+    button.setAttribute('aria-pressed', String(playing));
+  }, true);
+}
+
 window.addEventListener("beforeunload", (event) => {
   if (!document.querySelector('[data-unsaved="1"]')) return;
   event.preventDefault();

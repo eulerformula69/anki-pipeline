@@ -31,6 +31,7 @@
 .card-options { border-block: 1px solid var(--line); padding-block: .8rem; }
 .card-options summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
 .card-options summary small { float: right; font-size: .75rem; }
+.review-page .audio-toggle { margin-left: .5rem; padding: .2rem .5rem; min-width: 2rem; min-height: 2rem; vertical-align: middle; }
 .card-options .audio-editor { margin-block: .9rem; background: var(--surface); }
 .card-save { display: flex; justify-content: space-between; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .save-status { font-size: .75rem; color: var(--muted); }

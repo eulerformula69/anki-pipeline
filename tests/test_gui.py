@@ -84,7 +84,10 @@ def test_generated_audio_can_be_previewed_and_exported(tmp_path, monkeypatch):
     url = created.headers["location"]
     result = client.post(f"{url}/audio/find", data={"csrf": token}, follow_redirects=False)
     assert "audio_found=1" in result.headers["location"]
-    assert "Синтез речи · Nanami" in client.get(url).text
+    page = client.get(url).text
+    assert "Синтез речи · Nanami" in page
+    assert 'class="audio-toggle"' in page
+    assert 'aria-label="Прослушать аудио"' in page
     preview = client.get(f"{url}/cards/card_0001/audio")
     assert preview.content == b"ID3generated-speech"
     assert preview.headers["content-type"] == "audio/mpeg"
