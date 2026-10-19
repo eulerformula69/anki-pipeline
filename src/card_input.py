@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from .audio_sources import infer_audio_reading, infer_audio_text
 
@@ -28,7 +29,14 @@ def parse_llm_response(text: str) -> list[ParsedCard]:
         line = raw.strip()
         if not line:
             continue
-        parts = [part.strip() for part in line.split("|", 3)]
+        if line.startswith("|"):
+            line = line[1:]
+            if line.endswith("|"):
+                line = line[:-1]
+        parts = [part.strip() for part in re.split(r"(?<!\\)\|", line, maxsplit=3)]
+        if len(parts) == 4 and all(re.fullmatch(r":?-{2,}:?", part) for part in parts):
+            continue
+        parts = [part.replace(r"\|", "|") for part in parts]
         if len(parts) != 4 or not all(parts):
             raise CardInputError(
                 f"Строка {line_number}: используйте ID | type | question | answer."

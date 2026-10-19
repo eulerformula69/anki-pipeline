@@ -6,6 +6,20 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from threading import Event
 
 
+def test_markdown_table_creates_and_appends_cards(tmp_path):
+    store = ProjectStore(tmp_path)
+    header = "| id | type | question | answer |\n| -- | -- | -- | -- |\n"
+    project = store.create("Japanese", header + "| 1 | recall | Author? | 著者[ちょしゃ] |")
+    store.append(project["id"], header + "| 2 | application | Translate. | このレポートを 読[よ]みます。 |")
+
+    cards = store.load(project["id"])["cards"]
+
+    assert [card["source_id"] for card in cards] == ["1", "2"]
+    assert cards[0]["back"] == "著者[ちょしゃ]"
+    assert cards[0]["audio_text"] == "著者"
+    assert cards[1]["back"] == "このレポートを 読[よ]みます。"
+
+
 def test_delete_preserves_other_cards_and_never_reuses_ids(tmp_path):
     store = ProjectStore(tmp_path)
     project_id = store.create("Delete", "1 | recall | Q | A\n2 | recall | Q2 | A2")["id"]
