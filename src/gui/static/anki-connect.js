@@ -19,7 +19,9 @@ async function refreshAnkiDecks(data, action = "/anki-connect/decks") {
     for (const name of result.decks) select.add(new Option(name, name));
     if (result.decks.includes(previous)) select.value = previous;
     select.disabled = false;
-    importButton.disabled = result.decks.length === 0;
+    importButton.disabled = result.decks.length === 0
+      || Number(panel.querySelector("[data-connect-summary]").dataset.pending) === 0;
+    panel.querySelector("[data-connect-destination]").textContent = select.value || "не выбрана";
     status.textContent = result.decks.length
       ? "Связь с Anki установлена. Выберите колоду."
       : "В Anki нет колод. Создайте колоду в Anki и обновите список.";
@@ -46,6 +48,11 @@ document.addEventListener("click", (event) => {
     data.set("csrf", document.querySelector('[data-connect-settings] [name="csrf"]').value);
     refreshAnkiDecks(data);
   }
+});
+
+document.addEventListener("change", (event) => {
+  if (!event.target.matches("[data-connect-decks]")) return;
+  document.querySelector("[data-connect-destination]").textContent = event.target.value || "не выбрана";
 });
 
 document.addEventListener("submit", async (event) => {

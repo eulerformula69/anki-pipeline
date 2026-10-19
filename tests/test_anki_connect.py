@@ -60,7 +60,7 @@ def legacy_note(project, card, directory):
     return {"fields": dict(zip(FIELD_NAMES, values)), "tags": ["existing_user_tag"]}
 
 
-def test_legacy_package_import_updates_original_and_adds_identity(tmp_path):
+def test_legacy_package_import_skips_original_without_changes(tmp_path):
     project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
     anki = FakeAnki()
     anki.notes[1] = legacy_note(project, project["cards"][0], tmp_path)
@@ -68,9 +68,9 @@ def test_legacy_package_import_updates_original_and_adds_identity(tmp_path):
 
     assert anki.import_project(project, tmp_path, "Default", []) == (0, 1)
     assert len(anki.notes) == 1
-    assert anki.notes[1]["fields"]["Back"] == "Edited answer"
+    assert anki.notes[1]["fields"]["Back"] == "A"
     assert "existing_user_tag" in anki.notes[1]["tags"]
-    assert any(tag.startswith("anki-pipeline::") for tag in anki.notes[1]["tags"])
+    assert anki.notes[1]["tags"] == ["existing_user_tag"]
     assert not any(action == "addNote" for action, _ in anki.calls)
 
 
@@ -84,14 +84,14 @@ def test_existing_duplicates_stop_entire_batch_before_any_changes(tmp_path):
     assert all(action in {"deckNames", "findNotes", "notesInfo"} for action, _ in anki.calls)
 
 
-def test_identity_still_matches_when_front_is_edited(tmp_path):
+def test_receipt_skips_edited_front_after_restart(tmp_path):
     project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
     anki = FakeAnki()
     assert anki.import_project(project, tmp_path, "Default", []) == (1, 0)
     project["cards"][0]["front"] = "Updated question"
     assert anki.import_project(project, tmp_path, "Default", []) == (0, 1)
     assert len(anki.notes) == 1
-    assert anki.notes[1]["fields"]["Front"] == "Updated question"
+    assert anki.notes[1]["fields"]["Front"] == "Q"
 
 
 def test_foreign_project_identity_is_not_adopted(tmp_path):
@@ -110,7 +110,7 @@ def test_new_notes_do_not_allow_duplicates(tmp_path):
     assert anki.notes[1]["options"]["allowDuplicate"] is False
 
 
-def test_import_repeat_updates_and_moves_with_audio(tmp_path):
+def test_import_repeat_preserves_existing_note_and_deck_with_audio(tmp_path):
     store = ProjectStore(tmp_path)
     project = store.create("Japanese", "1 | recall | 寿司[すし] | sushi")
     directory = tmp_path / project["id"]
@@ -131,8 +131,9 @@ def test_import_repeat_updates_and_moves_with_audio(tmp_path):
     project["cards"][0]["back"] = "Updated"
     assert anki.import_project(project, directory, "Default", []) == (0, 1)
     assert len(anki.notes) == 1
-    assert ("changeDeck", {"cards": [100], "deck": "Default"}) in anki.calls
-    assert next(params for action, params in anki.calls if action == "updateNoteFields")["note"]["fields"]["Back"] == "Updated"
+    assert note["deckName"] == "日本語"
+    assert note["fields"]["Back"] == "sushi"
+    assert not any(action in {"updateNoteFields", "changeDeck", "addTags", "removeTags"} for action, _ in anki.calls)
 
 
 def test_validation_happens_before_mutations(tmp_path):
@@ -230,10 +231,17 @@ def test_import_route_and_offline_settings(tmp_path, monkeypatch):
     anki = FakeAnki()
     monkeypatch.setattr(AnkiConnect, "call", lambda self, action, **params: anki.call(action, **params))
     url = f"/projects/{project['id']}/anki-connect"
+    page = client.get(f"/projects/{project['id']}").text
+    assert 'data-pending="1"' in page
+    assert 'Проект: «Test»' in page
     assert client.post(url, data={"csrf": "wrong", "deck_name": "Default"}).status_code == 403
     response = client.post(url, data={"csrf": token, "deck_name": "Default"})
     assert response.status_code == 200
     assert "Импорт в Anki завершён" in response.text
+    assert 'data-pending="0"' in response.text
+    assert "Обновлено:" not in response.text
+    assert client.post(url, data={"csrf": token, "deck_name": "Default"}).status_code == 200
+    assert len(anki.notes) == 1
     assert client.post(url, data={"csrf": token, "deck_name": "Unknown"}).status_code == 422
 
     def offline(self):
@@ -245,7 +253,7 @@ def test_import_route_and_offline_settings(tmp_path, monkeypatch):
     assert load_settings(app.state.projects.root)["url"] == "http://127.0.0.1:8765"
 
 
-def test_old_identity_matches_edited_front_and_migrates_tags(tmp_path):
+def test_old_identity_skips_edited_front_without_changing_tags(tmp_path):
     from src.anki_export import stable_guid
 
     project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
@@ -257,8 +265,7 @@ def test_old_identity_matches_edited_front_and_migrates_tags(tmp_path):
     project["cards"][0]["tags"].append("my_tag")
     assert anki.import_project(project, tmp_path, "Default", ["lesson"]) == (0, 1)
     assert set(anki.notes[1]["tags"]) == {
-        "existing_user_tag", "my_tag", "lesson", "anki-pipeline::" + identity,
-        "anki-pipeline::LLM-source", "anki-pipeline::recall",
+        "existing_user_tag", "anki_pipeline::" + identity, "LLM-source", "recall",
     }
     assert anki.import_project(project, tmp_path, "Default", []) == (0, 1)
 
@@ -266,7 +273,44 @@ def test_old_identity_matches_edited_front_and_migrates_tags(tmp_path):
 def test_system_tags_keep_user_tags_outside_namespace():
     from src.anki_tags import note_tags
 
-    assert note_tags(["LLM-source", "recall", "manual", "my_tag"], ["lesson", "recall"], "abc") == [
+    assert note_tags(["LLM-source", "recall", "manual", "my_tag"], ["lesson", "recall"]) == [
         "anki-pipeline::LLM-source", "anki-pipeline::recall", "anki-pipeline::manual",
-        "my_tag", "lesson", "recall", "anki-pipeline::abc",
+        "my_tag", "lesson", "recall",
     ]
+
+
+def test_new_cards_are_sent_after_previous_batch(tmp_path):
+    store = ProjectStore(tmp_path)
+    project = store.create("Test", "1 | recall | Q | A")
+    directory = tmp_path / project["id"]
+    anki = FakeAnki()
+    assert anki.import_project(project, directory, "Default", []) == (1, 0)
+    project = store.append(project["id"], "2 | recall | Q2 | A2")
+    assert anki.import_project(project, directory, "Default", []) == (1, 1)
+    assert len(anki.notes) == 2
+
+
+def test_corrupt_receipts_stop_before_notes(tmp_path):
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
+    directory = tmp_path / project["id"]
+    (directory / "anki-sent.json").write_text('{"card_0001": true}', encoding="utf-8")
+    anki = FakeAnki()
+    with pytest.raises(AnkiConnectError, match="журнал"):
+        anki.import_project(project, directory, "Default", [])
+    assert not anki.notes
+
+
+def test_receipt_write_failure_does_not_readd_existing_note(tmp_path, monkeypatch):
+    from src import anki_connect
+
+    project = ProjectStore(tmp_path).create("Test", "1 | recall | Q | A")
+    anki = FakeAnki()
+    original = anki_connect.save_receipts
+    def fail(*args):
+        raise OSError("Disk full")
+    monkeypatch.setattr(anki_connect, "save_receipts", fail)
+    with pytest.raises(AnkiConnectError, match="Добавлено: 1"):
+        anki.import_project(project, tmp_path, "Default", [])
+    monkeypatch.setattr(anki_connect, "save_receipts", original)
+    assert anki.import_project(project, tmp_path, "Default", []) == (0, 1)
+    assert len(anki.notes) == 1

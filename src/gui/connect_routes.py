@@ -51,9 +51,9 @@ def import_project(request: Request, project_id: str, csrf: Annotated[str, Form(
         project = store.load(project_id)
         connection = AnkiConnect(**load_settings(store.root))
         tags = [tag for tag in re.split(r"[,\s]+", global_tags) if tag]
-        added, updated = connection.import_project(project, store.root / project_id, deck_name, tags)
+        added, skipped = connection.import_project(project, store.root / project_id, deck_name, tags)
     except (AnkiConnectError, AnkiExportError, ProjectError) as exc:
         return _error(request, str(exc))
     finally:
         IMPORT_LOCK.release()
-    return RedirectResponse(f"/projects/{project_id}?anki_added={added}&anki_updated={updated}", 303)
+    return RedirectResponse(f"/projects/{project_id}?anki_added={added}&anki_skipped={skipped}", 303)

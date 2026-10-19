@@ -17,7 +17,7 @@
 {% endif %}
 {% if audio_uploaded %}<p class="notice">Аудио сохранено.</p>{% endif %}
 {% if deck_created %}<p class="notice">Колода создана.</p>{% endif %}
-{% if anki_added is not none %}<p class="notice">Импорт в Anki завершён. Добавлено: {{ anki_added }}. Обновлено: {{ anki_updated }}.</p>{% endif %}
+{% if anki_added is not none %}<p class="notice">Импорт в Anki завершён. Добавлено: {{ anki_added }}. Уже отправлены: {{ anki_skipped }}.</p>{% endif %}
 
 <details class="panel add-cards">
   <summary>Добавить ответ LLM</summary>
@@ -97,6 +97,7 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label>Название колоды<input name="deck_name" maxlength="120" value="{{ project.name }}" required></label>
     <label>Общие теги<input name="global_tags" placeholder="japanese, lesson-24"></label>
+    <p>Файл содержит все включённые карточки. Повторный импорт файла обрабатывает Anki и может обновить заметки.</p>
     <button class="primary" data-busy-label="Создаём `.apkg`…">Создать `.apkg`</button>
   </form>
   {% if deck_ready %}<a class="download" href="/projects/{{ project.id }}/deck">Скачать готовую колоду</a>{% endif %}
@@ -109,7 +110,8 @@
       <label>Колода в Anki<select name="deck_name" data-connect-decks required disabled><option value="">Сначала подключитесь к Anki</option></select></label>
       <button type="button" data-connect-refresh>Обновить список колод</button>
       <label>Общие теги<input name="global_tags" placeholder="japanese, lesson-24"></label>
-      <p>Повторная отправка обновит карточки этого проекта и переместит их в выбранную колоду. Прогресс обучения сохранится.</p>
+      <p data-connect-summary data-pending="{{ pending }}">Проект: «{{ project.name }}». Новых карточек для отправки: {{ pending }}. Колода: <span data-connect-destination>не выбрана</span>.</p>
+      <p>Уже отправленные карточки пропускаются. Для правок используйте Anki. Существующие заметки и их колоды не меняются.</p>
       <button class="primary" data-connect-import disabled data-busy-label="Отправляем в Anki…">Импортировать в Anki</button>
     </form>
     <details>

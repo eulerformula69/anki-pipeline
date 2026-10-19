@@ -48,6 +48,13 @@ document.addEventListener("submit", async (event) => {
       });
       form.closest(".review-card").replaceWith(nextCard);
       document.querySelector("[data-card-count]").textContent = nextDocument.querySelector("[data-card-count]").textContent;
+      const summary = document.querySelector("[data-connect-summary]");
+      const destination = summary.querySelector("[data-connect-destination]").textContent;
+      summary.replaceWith(nextDocument.querySelector("[data-connect-summary]"));
+      document.querySelector("[data-connect-destination]").textContent = destination;
+      const select = document.querySelector("[data-connect-decks]");
+      document.querySelector("[data-connect-import]").disabled = select.disabled
+        || Number(document.querySelector("[data-connect-summary]").dataset.pending) === 0;
     } else {
       document.querySelector("main").replaceWith(nextMain);
     }

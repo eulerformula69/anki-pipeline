@@ -86,7 +86,7 @@ def test_export_builds_checked_deck_and_preserves_math(tmp_path, fake_genanki) -
     assert destination.is_file()
     note = FakePackage.last.deck.notes[0]
     assert note.fields[:2] == ["A &amp; B", r"\(x&lt;2\)"]
-    assert note.tags == ["anki-pipeline::LLM-source", "lesson_1", f"anki-pipeline::{stable_guid('test-1234', 'card_0001')}"]
+    assert note.tags == ["anki-pipeline::LLM-source", "lesson_1"]
     assert note.guid == stable_guid("test-1234", "card_0001")
     assert "furigana-tap-toggle" in note.model.kwargs["templates"][0]["qfmt"]
     assert note.fields[-1] == ""

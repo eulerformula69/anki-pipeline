@@ -21,10 +21,9 @@ def system_tag(tag: str) -> str:
     return tag
 
 
-def note_tags(card_tags: list[str], user_tags: list[str], identity: str) -> list[str]:
+def note_tags(card_tags: list[str], user_tags: list[str]) -> list[str]:
     tags = [system_tag(tag) for tag in card_tags]
     tags.extend(user_tags)
-    tags.append(TAG_PREFIX + identity)
     return list(dict.fromkeys(re.sub(r"\s+", "_", tag.strip()) for tag in tags if tag.strip()))
 
 

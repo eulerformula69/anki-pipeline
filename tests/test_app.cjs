@@ -23,6 +23,14 @@ function setup({ editor = true, dirty = true, ok = true, offline = false } = {})
   };
   currentCard = card;
   const count = { textContent: "2 of 2" };
+  const destination = { textContent: "Default" };
+  const summary = {
+    dataset: { pending: "2" },
+    querySelector: () => destination,
+    replaceWith(next) { summary.dataset = next.dataset; },
+  };
+  const importButton = { disabled: false };
+  const select = { disabled: false };
   const form = {
     method: "post",
     dataset: { unsaved: "1", audioUpload: "1" },
@@ -43,6 +51,10 @@ function setup({ editor = true, dirty = true, ok = true, offline = false } = {})
     querySelectorAll: () => [],
     querySelector: (selector) => selector === '[data-unsaved="1"]' ? dirty && secondCard
       : selector === "[data-card-count]" ? count
+      : selector === "[data-connect-summary]" ? summary
+      : selector === "[data-connect-destination]" ? destination
+      : selector === "[data-connect-import]" ? importButton
+      : selector === "[data-connect-decks]" ? select
       : { replaceWith() { mainReplaced = true; } },
     getElementById: () => nextCard,
   };
@@ -50,7 +62,8 @@ function setup({ editor = true, dirty = true, ok = true, offline = false } = {})
     title: "Saved",
     getElementById: () => nextCard,
     querySelector: (selector) => selector === ".error p:last-of-type" ? { textContent: "Audio text changed" }
-      : selector === "[data-card-count]" ? { textContent: "1 of 2" } : {},
+      : selector === "[data-card-count]" ? { textContent: "1 of 2" }
+      : selector === "[data-connect-summary]" ? { dataset: { pending: "0" } } : {},
   };
   vm.runInNewContext(script, {
     document,
@@ -68,7 +81,7 @@ function setup({ editor = true, dirty = true, ok = true, offline = false } = {})
     },
   });
   return {
-    handlers, alerts, page, form, secondCard, count, busy, nextCard,
+    handlers, alerts, page, form, secondCard, count, busy, nextCard, importButton, destination,
     currentCard: () => currentCard,
     mainReplaced: () => mainReplaced,
     requests: () => requests,
@@ -86,6 +99,8 @@ test("saving one card retains the other draft and updates the saved count", asyn
   assert.equal(ui.count.textContent, "1 of 2");
   assert.deepEqual(ui.alerts, []);
   assert.equal(ui.page.inert, false);
+  assert.equal(ui.importButton.disabled, true);
+  assert.equal(ui.destination.textContent, "Default");
 });
 
 test("actions that replace the page stop before a request when drafts exist", async () => {

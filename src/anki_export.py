@@ -139,7 +139,7 @@ def packaged_card_count(path: Path) -> int:
 def prepare_card(project: dict[str, Any], card: dict[str, Any], project_directory: Path,
                  global_tags: list[str]) -> tuple[list[str], list[str], list[tuple[str, Path]]]:
     media: list[tuple[str, Path]] = []
-    tags = note_tags(card["tags"], global_tags, stable_guid(project['id'], card['id']))
+    tags = note_tags(card["tags"], global_tags)
     audio_field = ""
     audio = card.get("audio")
     if (

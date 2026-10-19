@@ -10,7 +10,8 @@ import httpx
 
 from .anki_export import FIELD_NAMES, MODEL_NAME, _model, prepare_card, stable_guid
 from .anki_matching import NoteMatchError, find_import_targets
-from .anki_tags import TAG_PREFIX, system_tag
+from .anki_tags import TAG_PREFIX
+from .anki_receipts import load_receipts, save_receipts
 
 DEFAULT_URL = "http://127.0.0.1:8765"
 
@@ -100,7 +101,15 @@ class AnkiConnect:
                        deck_name: str, tags: list[str]) -> tuple[int, int]:
         if deck_name not in self.decks():
             raise AnkiConnectError("Колоды больше нет в Anki. Обновите список и выберите колоду.")
-        cards = [card for card in project["cards"] if card["included"]]
+        included = [card for card in project["cards"] if card["included"]]
+        try:
+            receipts = load_receipts(directory)
+        except (OSError, ValueError) as exc:
+            raise AnkiConnectError("Не удалось прочитать журнал отправки в Anki. Отправка остановлена.") from exc
+        cards = [card for card in included if card["id"] not in receipts]
+        skipped = len(included) - len(cards)
+        if included and not cards:
+            return 0, skipped
         if not cards:
             raise AnkiConnectError("Включите хотя бы одну карточку.")
         if any(not card["front"].strip() or not card["back"].strip() for card in cards):
@@ -115,35 +124,31 @@ class AnkiConnect:
         except NoteMatchError as exc:
             raise AnkiConnectError(str(exc)) from exc
         self.ensure_model()
-        added = updated = 0
+        added = 0
         try:
-            for (values, note_tags, media), target in zip(prepared, targets, strict=True):
+            for card, (values, note_tags, media), target in zip(cards, prepared, targets, strict=True):
+                if target:
+                    receipts[card["id"]] = target["noteId"]
+                    save_receipts(directory, receipts)
+                    skipped += 1
+                    continue
                 for filename, source in media:
                     stored = self.call("storeMediaFile", filename=filename,
                                        data=base64.b64encode(source.read_bytes()).decode("ascii"))
                     if stored != filename:
                         raise AnkiConnectError("Anki изменил имя аудиофайла. Импорт остановлен.")
                 fields = dict(zip(FIELD_NAMES, values, strict=True))
-                if target:
-                    note_id = target["noteId"]
-                    self.call("updateNoteFields", note={"id": note_id, "fields": fields})
-                    self.call("addTags", notes=[note_id], tags=" ".join(note_tags))
-                    obsolete = [tag for tag in target.get("tags", []) if system_tag(tag) != tag]
-                    if obsolete:
-                        self.call("addTags", notes=[note_id], tags=" ".join(system_tag(tag) for tag in obsolete))
-                        self.call("removeTags", notes=[note_id], tags=" ".join(obsolete))
-                    self.call("changeDeck", cards=target["cards"], deck=deck_name)
-                    updated += 1
-                else:
-                    note_id = self.call("addNote", note={"deckName": deck_name, "modelName": MODEL_NAME,
-                              "fields": fields, "tags": note_tags,
-                              "options": {"allowDuplicate": False}})
-                    if not isinstance(note_id, int) or isinstance(note_id, bool):
-                        raise AnkiConnectError("Anki не подтвердил создание карточки.")
-                    added += 1
+                note_id = self.call("addNote", note={"deckName": deck_name, "modelName": MODEL_NAME,
+                          "fields": fields, "tags": note_tags,
+                          "options": {"allowDuplicate": False}})
+                if type(note_id) is not int or note_id <= 0:
+                    raise AnkiConnectError("Anki не подтвердил создание карточки.")
+                added += 1
+                receipts[card["id"]] = note_id
+                save_receipts(directory, receipts)
         except (AnkiConnectError, OSError) as exc:
             raise AnkiConnectError(
-                f"Импорт прерван. Добавлено: {added}, обновлено: {updated}. "
-                f"{exc} Повторная отправка обновит уже отправленные карточки."
+                f"Импорт прерван. Добавлено: {added}, пропущено: {skipped}. "
+                f"{exc} При повторной отправке сохранённые отправки будут пропущены."
             ) from exc
-        return added, updated
+        return added, skipped

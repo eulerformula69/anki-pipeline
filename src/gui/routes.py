@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from ..audio_sources import AudioDownload, AudioLookupError, forvo_search_url
 from ..audio_tts import find_or_generate_audio
 from ..anki_export import AnkiExportError, build_anki_deck
+from ..anki_receipts import load_receipts
 from ..project_store import ProjectError
 
 
@@ -110,6 +111,11 @@ def review(request: Request, project_id: str) -> HTMLResponse:
     except ProjectError as exc:
         return _error(request, str(exc), 404)
     included = sum(card["included"] for card in project["cards"])
+    try:
+        receipts = load_receipts(request.app.state.projects.root / project_id)
+    except (OSError, ValueError):
+        return _error(request, "Не удалось прочитать журнал отправки в Anki. Проверьте файл anki-sent.json.")
+    pending = sum(card["included"] and card["id"] not in receipts for card in project["cards"])
     deck_ready = (request.app.state.projects.root / project_id / "deck.apkg").is_file()
     for card in project["cards"]:
         card["forvo_url"] = forvo_search_url(card["audio_text"]) if card["audio_text"] else ""
@@ -119,6 +125,7 @@ def review(request: Request, project_id: str) -> HTMLResponse:
         {
             "project": project,
             "included": included,
+            "pending": pending,
             "deck_ready": deck_ready,
             "audio_found": request.query_params.get("audio_found"),
             "audio_missing": request.query_params.get("audio_missing"),
@@ -126,7 +133,7 @@ def review(request: Request, project_id: str) -> HTMLResponse:
             "audio_uploaded": request.query_params.get("audio_uploaded"),
             "deck_created": request.query_params.get("exported"),
             "anki_added": request.query_params.get("anki_added"),
-            "anki_updated": request.query_params.get("anki_updated"),
+            "anki_skipped": request.query_params.get("anki_skipped"),
         },
     )
 
