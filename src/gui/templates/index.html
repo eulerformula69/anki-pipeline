@@ -1,12 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Новая колода · anki-pipeline{% endblock %}
 {% block content %}
-<section class="hero">
-  <p class="eyebrow">НОВАЯ КОЛОДА</p>
-  <h1>Превратите ответ LLM в колоду Anki.</h1>
-  <p>Вставьте готовые карточки, проверьте их и скачайте `.apkg` или отправьте в Anki.</p>
-</section>
-
 <form class="panel start-card" method="post" action="/projects" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <label>Название проекта (необязательно)<input name="project_name" maxlength="120" placeholder="По умолчанию: ГГГГ-ММ-ДД-ХЭШ"></label>
