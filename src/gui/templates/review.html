@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} · anki-pipeline{% endblock %}
-{% block styles %}<link rel="stylesheet" href="/static/review.css?v=3">{% endblock %}
+{% block styles %}<link rel="stylesheet" href="/static/review.css?v=4">{% endblock %}
 {% block content %}
 <div data-async-page class="review-page">
 <section class="panel toolbar">
@@ -59,13 +59,27 @@
         {% if card.audio.source_url %}<a href="{{ card.audio.source_url }}" target="_blank" rel="noopener">{{ card.audio.source }}</a>{% else %}{{ card.audio.source }}{% endif %}
         {% if card.audio.license %} · {{ card.audio.license }}{% endif %}
       </p>
-      <audio class="audio-preview" controls preload="none" src="/projects/{{ project.id }}/cards/{{ card.id }}/audio">Ваш браузер не поддерживает аудио.</audio>
+      <audio class="audio-preview" controls preload="metadata" src="/projects/{{ project.id }}/cards/{{ card.id }}/audio">Ваш браузер не поддерживает аудио.</audio>
       {% elif card.audio %}
-      <p class="audio-status">Текст изменён. Нажмите «Добавить аудио», чтобы обновить запись.</p>
+      <p class="audio-status">Текст изменён. Найдите варианты аудио, чтобы обновить запись.</p>
       {% elif card.forvo_url %}
-      <p class="audio-status">Аудио пока нет. Нажмите «Добавить аудио» или <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">найдите запись на Forvo</a>.</p>
+      <p class="audio-status">Аудио пока нет. Найдите варианты ниже или <a href="{{ card.forvo_url }}" target="_blank" rel="noopener">найдите запись на Forvo</a>.</p>
       {% endif %}
-      <button name="audio_action" value="generate" data-busy-label="Добавляем аудио…">Добавить аудио</button>
+      <button name="audio_action" value="candidates" data-busy-label="Ищем записи и создаём Nanami…">Найти варианты аудио</button>
+      {% if card.audio_candidates %}
+      <p class="audio-status">Прослушайте варианты и выберите один. Текущая запись заменится после выбора.</p>
+      {% for candidate in card.audio_candidates %}
+      <div class="audio-candidate">
+        <strong>{{ candidate.name }}</strong>
+        {% if candidate.error %}
+        <small>{{ candidate.error }}</small>
+        {% else %}
+        <audio controls preload="metadata" src="/projects/{{ project.id }}/cards/{{ card.id }}/audio/candidates/{{ candidate.token }}">Ваш браузер не поддерживает аудио.</audio>
+        <button name="audio_action" value="select:{{ candidate.token }}" data-busy-label="Сохраняем аудио…">Использовать запись</button>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
       <label>Загрузить свою запись
         <small>Файл сохранится сразу. MP3, OGG, OGA или WAV, до 10 МБ</small>
         <small class="audio-upload-status">Загружаем аудио…</small>

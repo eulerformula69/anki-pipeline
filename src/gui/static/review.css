@@ -33,6 +33,8 @@
 .card-options summary small { float: right; font-size: .75rem; }
 .review-page .audio-toggle { margin-left: .5rem; padding: .2rem .5rem; min-width: 2rem; min-height: 2rem; vertical-align: middle; }
 .card-options .audio-editor { margin-block: .9rem; background: var(--surface); }
+.audio-candidate { display: grid; gap: .5rem; padding-block: .75rem; border-top: 1px solid var(--line); }
+.audio-candidate audio { width: 100%; }
 .card-save { display: flex; justify-content: space-between; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .save-status { font-size: .75rem; color: var(--muted); }
 .editor[data-unsaved="1"] .save-status { color: var(--warning); }

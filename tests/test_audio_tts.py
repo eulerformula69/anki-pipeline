@@ -24,20 +24,20 @@ def test_native_recording_does_not_call_tts(monkeypatch):
     assert audio_tts.find_or_generate_audio("信頼できる", "しんらいできる") == expected
 
 
-def test_synthesis_joins_audio_chunks_and_strips_furigana(monkeypatch):
+def test_synthesis_joins_audio_chunks_and_strips_furigana(monkeypatch, speech_mp3):
     class Communicate:
         def __init__(self, text, voice):
             assert text == "信頼できる"
             assert voice == "ja-JP-NanamiNeural"
 
         async def stream(self):
-            yield {"type": "audio", "data": b"ID3"}
+            yield {"type": "audio", "data": speech_mp3[:100]}
             yield {"type": "WordBoundary", "text": "ignored"}
-            yield {"type": "audio", "data": b"speech"}
+            yield {"type": "audio", "data": speech_mp3[100:]}
 
     monkeypatch.setattr(audio_tts.edge_tts, "Communicate", Communicate)
     result = audio_tts.generate_audio("信頼[しんらい]できる")
-    assert result.data == b"ID3speech"
+    assert result.data == speech_mp3
     assert result.suffix == ".mp3"
     assert result.source_name == "Синтез речи · Nanami"
 

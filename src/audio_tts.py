@@ -10,6 +10,7 @@ from .audio_sources import (
     AudioLookupError,
     find_native_audio,
     strip_furigana,
+    validate_audio,
 )
 
 
@@ -32,6 +33,7 @@ def generate_audio(value: str) -> AudioDownload | None:
         return None
     try:
         data = asyncio.run(_synthesize(text))
+        validate_audio(data)
     except AudioLookupError:
         raise
     except Exception as exc:

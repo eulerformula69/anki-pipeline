@@ -4,12 +4,16 @@ import hashlib
 import html
 import json
 import re
+from io import BytesIO
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
+
+from mutagen import File as AudioFile
+from mutagen import MutagenError
 
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
@@ -39,6 +43,16 @@ class AudioDownload:
     license_name: str
     attribution: str
     source_name: str = "Wikimedia Commons"
+
+
+def validate_audio(data: bytes) -> None:
+    try:
+        audio = AudioFile(BytesIO(data))
+        if audio is not None and audio.info.length >= 0.15:
+            return
+    except (MutagenError, ValueError, EOFError):
+        pass
+    raise AudioLookupError("Аудиофайл повреждён или слишком короткий. Выберите другую запись.")
 
 
 def strip_furigana(value: str) -> str:
@@ -105,6 +119,7 @@ def find_jpod101_audio(value: str, reading: str) -> AudioDownload | None:
     digest = hashlib.md5(data, usedforsecurity=False).hexdigest()
     if digest == JPOD101_MISSING_MD5:
         return None
+    validate_audio(data)
     return AudioDownload(
         data,
         ".mp3",
@@ -171,6 +186,10 @@ def _commons_file(titles: list[str], target: str) -> AudioDownload | None:
         if suffix not in {".mp3", ".ogg", ".oga", ".wav"}:
             continue
         data = _request_bytes(audio_url)
+        try:
+            validate_audio(data)
+        except AudioLookupError:
+            continue
         attribution = _metadata_text(metadata, "Artist") or "Wikimedia Commons contributor"
         return AudioDownload(data, suffix, source_url, license_name, attribution)
     return None

@@ -8,12 +8,13 @@ from typing import Annotated, Any
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
-from ..audio_sources import AudioDownload, AudioLookupError, forvo_search_url
+from ..audio_sources import AudioDownload, AudioLookupError, forvo_search_url, validate_audio
 from ..audio_tts import find_or_generate_audio
+from ..audio_candidates import find_candidates, read_candidates, selected_candidate
 from ..anki_export import AnkiExportError, build_anki_deck
 from ..anki_receipts import load_receipts
 from ..project_store import ProjectError
@@ -119,6 +120,9 @@ def review(request: Request, project_id: str) -> HTMLResponse:
     deck_ready = (request.app.state.projects.root / project_id / "deck.apkg").is_file()
     for card in project["cards"]:
         card["forvo_url"] = forvo_search_url(card["audio_text"]) if card["audio_text"] else ""
+        card["audio_candidates"] = read_candidates(
+            request.app.state.projects.root / project_id, card
+        )
     return _render(
         request,
         "review.html",
@@ -193,6 +197,10 @@ async def update_card(
         await audio_file.close()
         if len(data) > MAX_AUDIO_UPLOAD:
             return _error(request, "Аудиофайл больше 10 МБ.")
+        try:
+            validate_audio(data)
+        except AudioLookupError as exc:
+            return _error(request, str(exc))
         upload = (data, suffix)
     try:
         request.app.state.projects.update_card(
@@ -219,6 +227,25 @@ async def update_card(
             )
     except ProjectError as exc:
         return _error(request, str(exc))
+    if audio_action == "candidates":
+        if not audio_text.strip():
+            return _error(request, "Карточка сохранена. Укажите текст для аудио.")
+        await run_in_threadpool(
+            find_candidates, request.app.state.projects.root / project_id,
+            card_id, audio_text.strip(), audio_reading.strip(),
+        )
+    if audio_action.startswith("select:"):
+        try:
+            download = selected_candidate(
+                request.app.state.projects.root / project_id, card_id,
+                audio_action.removeprefix("select:"), audio_text.strip(), audio_reading.strip(),
+            )
+            request.app.state.projects.attach_audio(
+                project_id, card_id, download, source=download.source_name,
+                expected_audio=(audio_text.strip(), audio_reading.strip()),
+            )
+        except (AudioLookupError, ProjectError) as exc:
+            return _error(request, str(exc))
     if audio_action == "generate":
         if not audio_text.strip():
             return _error(request, "Карточка сохранена. Укажите текст для аудио и повторите попытку.")
@@ -232,7 +259,7 @@ async def update_card(
             )
         except (AudioLookupError, ProjectError) as exc:
             return _error(request, f"Карточка сохранена. {exc}")
-    suffix = "?audio_uploaded=1" if upload or audio_action == "generate" else ""
+    suffix = "?audio_uploaded=1" if upload or audio_action == "generate" or audio_action.startswith("select:") else ""
     return RedirectResponse(f"/projects/{project_id}{suffix}#{card_id}", 303)
 
 
@@ -290,7 +317,24 @@ def preview_audio(request: Request, project_id: str, card_id: str):
         path = request.app.state.projects.audio_path(project_id, card_id)
     except ProjectError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/projects/{project_id}/cards/{card_id}/audio/candidates/{token}")
+def preview_candidate(request: Request, project_id: str, card_id: str, token: str):
+    try:
+        project = request.app.state.projects.load(project_id)
+        card = next((card for card in project["cards"] if card["id"] == card_id), None)
+        if card is None:
+            raise AudioLookupError("Карточка не найдена.")
+        download = selected_candidate(
+            request.app.state.projects.root / project_id, card_id, token,
+            card["audio_text"], card["audio_reading"],
+        )
+    except (ProjectError, AudioLookupError) as exc:
+        raise HTTPException(404, str(exc)) from exc
+    media_type = {".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".oga": "audio/ogg", ".wav": "audio/wav"}
+    return Response(download.data, media_type=media_type[download.suffix], headers={"Cache-Control": "no-store"})
 
 
 @router.post("/projects/{project_id}/cards/{card_id}/delete")

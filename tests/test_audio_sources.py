@@ -28,7 +28,7 @@ def test_forvo_url_uses_clean_encoded_text() -> None:
     assert forvo_search_url("日本語") == "https://forvo.com/word/%E6%97%A5%E6%9C%AC%E8%AA%9E/#ja"
 
 
-def test_commons_lookup_batches_candidates_and_accepts_open_japanese_audio(monkeypatch) -> None:
+def test_commons_lookup_batches_candidates_and_accepts_open_japanese_audio(monkeypatch, speech_mp3) -> None:
     responses = [
         {"query": {"search": [{"title": "File:wrong.ogg"}, {"title": "File:right.ogg"}]}},
         {"query": {"pages": [{"imageinfo": [{
@@ -45,11 +45,11 @@ def test_commons_lookup_batches_candidates_and_accepts_open_japanese_audio(monke
     ]
     calls = []
     monkeypatch.setattr(audio_sources, "_request_json", lambda parameters: calls.append(parameters) or responses.pop(0))
-    monkeypatch.setattr(audio_sources, "_request_bytes", lambda url: b"OggSaudio")
+    monkeypatch.setattr(audio_sources, "_request_bytes", lambda url: speech_mp3)
 
     result = find_commons_audio("寿司")
 
-    assert result is not None and result.data == b"OggSaudio"
+    assert result is not None and result.data == speech_mp3
     assert calls[1]["titles"] == "File:wrong.ogg|File:right.ogg"
 
 
@@ -63,8 +63,8 @@ def test_jpod101_lookup_rejects_missing_audio_marker(monkeypatch) -> None:
     assert find_jpod101_audio("存在しない語", "そんざいしないご") is None
 
 
-def test_jpod101_lookup_returns_mp3(monkeypatch) -> None:
-    monkeypatch.setattr(audio_sources, "_request_bytes", lambda url: b"ID3native-audio")
+def test_jpod101_lookup_returns_mp3(monkeypatch, speech_mp3) -> None:
+    monkeypatch.setattr(audio_sources, "_request_bytes", lambda url: speech_mp3)
 
     result = find_jpod101_audio("論文", "ろんぶん")
 

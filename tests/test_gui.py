@@ -67,12 +67,12 @@ def test_add_audio_for_one_card_saves_edits_and_leaves_other_cards(tmp_path, mon
         assert client.get(f"{url}/audio").content == b"ID3single"
 
 
-def test_generated_audio_can_be_previewed_and_exported(tmp_path, monkeypatch):
+def test_generated_audio_can_be_previewed_and_exported(tmp_path, monkeypatch, speech_mp3):
     monkeypatch.setattr("src.audio_tts.find_native_audio", lambda *args: None)
 
     async def synthesize(text):
         assert text == "この情報が信頼できるかどうか調べています。"
-        return b"ID3generated-speech"
+        return speech_mp3
 
     monkeypatch.setattr("src.audio_tts._synthesize", synthesize)
     client = TestClient(create_app(root=tmp_path))
@@ -89,12 +89,12 @@ def test_generated_audio_can_be_previewed_and_exported(tmp_path, monkeypatch):
     assert 'class="audio-toggle"' in page
     assert 'aria-label="Прослушать аудио"' in page
     preview = client.get(f"{url}/cards/card_0001/audio")
-    assert preview.content == b"ID3generated-speech"
+    assert preview.content == speech_mp3
     assert preview.headers["content-type"] == "audio/mpeg"
     exported = client.post(f"{url}/export", data={"csrf": token, "deck_name": "Nanami"})
     assert exported.status_code == 200
     with zipfile.ZipFile(tmp_path / "output" / url.rsplit("/", 1)[-1] / "deck.apkg") as package:
-        assert b"ID3generated-speech" in [package.read(name) for name in package.namelist()]
+        assert speech_mp3 in [package.read(name) for name in package.namelist()]
 
 
 @pytest.mark.parametrize("name", [None, "", "   "])
@@ -175,7 +175,7 @@ def test_prompt_is_opened_as_plain_text(tmp_path) -> None:
     assert "| type | question | answer" in response.text
 
 
-def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
+def test_audio_lookup_updates_project(tmp_path, monkeypatch, speech_mp3) -> None:
     client = TestClient(create_app(root=tmp_path))
     token = client.get("/").cookies["anki_csrf"]
     created = client.post(
@@ -227,7 +227,7 @@ def test_audio_lookup_updates_project(tmp_path, monkeypatch) -> None:
             "tags": "japanese",
             "included": "true",
         },
-        files={"audio_file": ("sushi.mp3", b"ID3audio", "audio/mpeg")},
+        files={"audio_file": ("sushi.mp3", speech_mp3, "audio/mpeg")},
         follow_redirects=False,
     )
 
